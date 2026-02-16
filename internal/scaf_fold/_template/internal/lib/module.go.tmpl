@@ -1,0 +1,17 @@
+package libs
+
+import (
+	"go.uber.org/fx"
+{{- if .MySQL }}
+
+	gormv2 "{{ .ModuleName }}/internal/lib/gorm"
+{{- end }}
+	"{{ .ModuleName }}/internal/lib/redis"
+)
+
+var GlobalModule = fx.Provide(
+{{- if .MySQL }}
+	gormv2.New,
+{{- end }}
+	redis.New,
+)

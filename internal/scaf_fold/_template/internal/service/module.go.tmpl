@@ -1,0 +1,19 @@
+package service
+
+import (
+	"go.uber.org/fx"
+
+	"{{ .ModuleName }}/internal/service/common_srv"
+	"{{ .ModuleName }}/internal/service/example_srv"
+)
+
+var Module = fx.Provide(
+	common_srv.NewLarkService,
+	common_srv.NewPrometheusService,
+{{- if .MySQL }}
+	example_srv.NewUserService,
+{{- end }}
+{{- if .MongoDB }}
+	example_srv.NewUserMongoService,
+{{- end }}
+)

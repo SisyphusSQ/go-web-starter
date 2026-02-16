@@ -1,0 +1,76 @@
+---
+debug: true
+contextTimeout: 600
+
+server:
+    address: ":8080"
+
+{{- if .MySQL }}
+database:
+    driver: "mysql"
+    host: "127.0.0.1"
+    port: 3306
+    database: test
+    username: root
+    password: root
+    maxIdleConns: 20
+    maxLeftTime: 40
+    name: "db_test"
+
+{{- end }}
+redis:
+    name: "test"
+    proto: "tcp"
+    addr: "127.0.0.1:6379"
+    auth: "root123"
+    db: 0
+    dialTimeout: "10s"
+    readTimeout: "1s"
+    writeTimeout: "1s"
+    pool:
+        active: 200
+        idle: 200
+
+{{- if .MongoDB }}
+mongodb:
+    uri: "host1,host2,host3:27017"
+    authSource: "admin"
+    user: "mongo"
+    password: "xxx"
+    database: "test"
+    maxPoolSize: 20
+    minPoolSize: 10
+    connectTimeoutMS: 100000
+    socketTimeoutMS: 300000
+
+{{- end }}
+prometheus:
+    url: "http://127.0.0.1:9090"
+    token: ""
+
+lark:
+    appID: "cli_xxx"
+    appSecret: "xxx"
+
+log:
+    fileName: logs/{{ .ProjectName }}.log
+    logLevel: 0
+    maxSizeMB: 20
+    maxBackupCount: 30
+    maxKeepDays: 7
+
+key:
+    type: jwt
+    basic:
+        user: web
+        password: web
+    ak:
+        accessKey: "xxxxx"
+        secretKey: "xxxxx"
+    jwt:
+        secret: "{{ .ProjectName }}-jwt-secret-change-me"
+        expire: 7200
+        issuer: "{{ .ProjectName }}"
+
+cron:
+    on: true

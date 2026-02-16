@@ -1,0 +1,18 @@
+package controller
+
+import (
+	"go.uber.org/fx"
+
+	"{{ .ModuleName }}/internal/controller/comm_controller"
+	"{{ .ModuleName }}/internal/controller/example_controller"
+)
+
+var Module = fx.Invoke(
+	comm_controller.InitIndexController,
+{{- if .MySQL }}
+	example_controller.InitUserController,
+{{- end }}
+{{- if .MongoDB }}
+	example_controller.InitUserMongoController,
+{{- end }}
+)

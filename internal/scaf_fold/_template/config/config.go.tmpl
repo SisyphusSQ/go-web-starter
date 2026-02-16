@@ -1,0 +1,161 @@
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/spf13/viper"
+	"go.uber.org/zap/zapcore"
+)
+
+var (
+	configFile = "config/config.yml"
+	configType = "yml"
+)
+
+type (
+	Config struct {
+		Debug          bool   `mapstructure:"debug"`
+		ContextTimeout int    `mapstructure:"contextTimeout"`
+		Server         Server `mapstructure:"server"`
+{{- if .MySQL }}
+		Database Database `mapstructure:"database"`
+{{- end }}
+		Log        Log   `mapstructure:"log"`
+		Key        Key   `mapstructure:"key"`
+		Cron       Cron  `mapstructure:"cron"`
+		Redis      Redis `mapstructure:"redis"`
+{{- if .MongoDB }}
+		MongoDB MongoDB `mapstructure:"mongodb"`
+{{- end }}
+		Prometheus Http `mapstructure:"prometheus"`
+		Lark       Lark `mapstructure:"lark"`
+	}
+
+	Server struct {
+		Address string `mapstructure:"address"`
+	}
+
+{{- if .MySQL }}
+	Database struct {
+		Driver       string        `mapstructure:"driver"`
+		Host         string        `mapstructure:"host"`
+		Port         int           `mapstructure:"port"`
+		User         string        `mapstructure:"username"`
+		Password     string        `mapstructure:"password"`
+		Database     string        `mapstructure:"database"`
+		MaxIdleConns int           `mapstructure:"maxIdleConns"`
+		MaxLeftTime  time.Duration `mapstructure:"maxLeftTime"`
+		MaxOpenConns int           `mapstructure:"maxOpenConns"`
+		Charset      string        `mapstructure:"charset"`
+		TimeZone     string        `mapstructure:"timeZone"`
+		Name         string        `mapstructure:"name"`
+	}
+{{- end }}
+
+	Log struct {
+		FileName       string        `mapstructure:"fileName"`
+		LogLevel       zapcore.Level `mapstructure:"logLevel"`
+		MaxSizeMb      int           `mapstructure:"maxSizeMB"`
+		MaxBackupCount int           `mapstructure:"maxBackupCount"`
+		MaxKeepDays    int           `mapstructure:"maxKeepDays"`
+	}
+
+	Key struct {
+		Type string `mapstructure:"type"`
+
+		Basic BasicAuth `mapstructure:"basic"`
+		AK    AKAuth    `mapstructure:"ak"`
+		JWT   JWTConfig `mapstructure:"jwt"`
+	}
+
+	BasicAuth struct {
+		User     string `mapstructure:"user"`
+		Password string `mapstructure:"password"`
+	}
+
+	AKAuth struct {
+		AccessKey string `mapstructure:"accessKey"`
+		SecretKey string `mapstructure:"secretKey"`
+	}
+
+	JWTConfig struct {
+		Secret string `mapstructure:"secret"`
+		Expire int    `mapstructure:"expire"`
+		Issuer string `mapstructure:"issuer"`
+	}
+
+	Cron struct {
+		On bool `mapstructure:"on"`
+	}
+
+	Redis struct {
+		PoolConfig `yaml:"pool" mapstructure:"pool"`
+
+		Name         string        `yaml:"name" mapstructure:"name"`
+		Proto        string        `yaml:"proto" mapstructure:"proto"`
+		Addr         string        `yaml:"addr" mapstructure:"addr"`
+		Auth         string        `yaml:"auth" mapstructure:"auth"`
+		DialTimeout  time.Duration `yaml:"dialTimeout" mapstructure:"dialTimeout"`
+		ReadTimeout  time.Duration `yaml:"readTimeout" mapstructure:"readTimeout"`
+		WriteTimeout time.Duration `yaml:"writeTimeout" mapstructure:"writeTimeout"`
+		DB           int           `yaml:"db" mapstructure:"db"`
+		SlowLog      time.Duration `yaml:"slowLog" mapstructure:"slowLog"`
+	}
+
+	PoolConfig struct {
+		Active      int           `yaml:"active" mapstructure:"active"`
+		Idle        int           `yaml:"idle" mapstructure:"idle"`
+		WaitTimeout time.Duration `yaml:"waitTimeout" mapstructure:"waitTimeout"`
+		Wait        bool          `yaml:"wait" mapstructure:"wait"`
+	}
+
+{{- if .MongoDB }}
+	MongoDB struct {
+		URI        string `yaml:"uri" mapstructure:"uri"`
+		AuthSource string `yaml:"authSource" mapstructure:"authSource"`
+		User       string `yaml:"user" mapstructure:"user"`
+		Password   string `yaml:"password" mapstructure:"password"`
+		Database   string `yaml:"database" mapstructure:"database"`
+
+		MaxPoolSize uint64 `yaml:"maxPoolSize" mapstructure:"maxPoolSize"`
+		MinPoolSize uint64 `yaml:"minPoolSize" mapstructure:"minPoolSize"`
+
+		ConnectTimeoutMS int64 `yaml:"connectTimeoutMS" mapstructure:"connectTimeoutMS"`
+		SocketTimeoutMS  int64 `yaml:"socketTimeoutMS" mapstructure:"socketTimeoutMS"`
+	}
+{{- end }}
+
+	Http struct {
+		URL   string `yaml:"url" mapstructure:"url"`
+		Token string `yaml:"token" mapstructure:"token"`
+	}
+
+	Lark struct {
+		AppID     string `yaml:"appID" mapstructure:"appID"`
+		AppSecret string `yaml:"appSecret" mapstructure:"appSecret"`
+	}
+)
+
+func NewConfig() Config {
+	conf := &Config{}
+	err := viper.Unmarshal(conf)
+	if err != nil {
+		fmt.Printf("unable decode into config struct, %v", err)
+	}
+	return *conf
+}
+
+func InitConfig() {
+	viper.SetConfigType(configType)
+	viper.SetConfigFile(configFile)
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
+func SetConfigFile(file string) {
+	configFile = file
+}
