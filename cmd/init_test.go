@@ -73,8 +73,8 @@ func TestInitAndNewDBBehaviorConsistency(t *testing.T) {
 			t.Fatalf("read go.mod in %s: %v", dir, err)
 		}
 		modText := string(goMod)
-		if !strings.Contains(modText, "github.com/qiniu/qmgo") {
-			t.Fatalf("go.mod in %s should include qmgo dependency", dir)
+		if !strings.Contains(modText, "go.mongodb.org/mongo-driver/v2") {
+			t.Fatalf("go.mod in %s should include mongo-driver/v2 dependency", dir)
 		}
 		if strings.Contains(modText, "gorm.io/gorm") {
 			t.Fatalf("go.mod in %s should not include gorm dependency in mongodb mode", dir)

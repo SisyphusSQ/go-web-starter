@@ -3,13 +3,14 @@ package log
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
-	"github.com/SisyphusSQ/golib/utils/timeutil"
-	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"{{ .ModuleName }}/config"
+	"{{ .ModuleName }}/utils/timeutil"
 )
 
 var (
@@ -17,9 +18,19 @@ var (
 	LarkLogger *LarkZapLogger
 )
 
-func New(config config.Config) {
+func New(config config.Config) error {
 	c := config.Log
-	preCheck(c.LogLevel)
+	if err := preCheck(c.LogLevel); err != nil {
+		return err
+	}
+	if c.FileName == "" {
+		return fmt.Errorf("log.fileName is required")
+	}
+	if dir := filepath.Dir(c.FileName); dir != "." {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return fmt.Errorf("create log directory %q: %w", dir, err)
+		}
+	}
 
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   c.FileName,
@@ -50,13 +61,21 @@ func New(config config.Config) {
 	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1)).Sugar()
 	Logger = NewZapLogger(logger)
 	LarkLogger = NewLarkZapLogger(logger)
+	return nil
 }
 
-func preCheck(logLevel zapcore.Level) {
+func preCheck(logLevel zapcore.Level) error {
 	if logLevel < zapcore.DebugLevel || logLevel > zapcore.FatalLevel {
-		fmt.Printf("invalid log-level %d, should be [-1,5]", logLevel)
-		os.Exit(1)
+		return fmt.Errorf("invalid log level %d: must be between -1 and 5", logLevel)
 	}
+	return nil
+}
+
+func Sync() error {
+	if Logger == nil {
+		return nil
+	}
+	return Logger.Sync()
 }
 
 func customLevelEncoder(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
@@ -156,6 +175,6 @@ func (l *ZapLogger) Error(format string, args ...interface{}) {
 	l.logger.Errorf(format, args...)
 }
 
-func (l *ZapLogger) Sync() {
-	_ = l.logger.Sync()
+func (l *ZapLogger) Sync() error {
+	return l.logger.Sync()
 }

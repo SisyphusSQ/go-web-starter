@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,8 @@ func TestGenerate(t *testing.T) {
 		filepath.Join("internal", "lib", "gorm", "gorm.go"),
 		filepath.Join("internal", "lib", "mongodb", "mongodb.go"),
 		filepath.Join("vars", "vars.go"),
+		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".dockerignore"),
 		filepath.Join("README.md"),
 	} {
 		assertFileExists(t, filepath.Join(outputDir, relPath))
@@ -143,6 +146,19 @@ func TestGenerateRejectsInvalidTemplateData(t *testing.T) {
 	}
 }
 
+func TestGenerateRejectsUnsupportedGoVersion(t *testing.T) {
+	err := Generate(filepath.Join(t.TempDir(), "out"), TemplateData{
+		ModuleName:  "github.com/test/old-go",
+		BinaryName:  "old-go",
+		ProjectName: "old-go",
+		GoVersion:   "1.26.0",
+		MySQL:       true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "below the template minimum") {
+		t.Fatalf("Generate() error = %v, want minimum Go version error", err)
+	}
+}
+
 func TestGenerateE2EDBCombos(t *testing.T) {
 	testGenerateE2EDBCombos(t, false)
 }
@@ -167,9 +183,6 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 			leakCheck: func(t *testing.T, outputDir string) {
 				t.Helper()
 				goMod := readFileForAssertion(t, filepath.Join(outputDir, "go.mod"))
-				if strings.Contains(goMod, "github.com/qiniu/qmgo") {
-					t.Fatalf("mysql-only go.mod should not contain qmgo dependency")
-				}
 				if strings.Contains(goMod, "go.mongodb.org/mongo-driver") {
 					t.Fatalf("mysql-only go.mod should not contain mongo-driver dependency")
 				}
@@ -209,8 +222,19 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 				if !strings.Contains(goMod, "gorm.io/gorm") {
 					t.Fatalf("full mode go.mod should contain gorm dependency")
 				}
-				if !strings.Contains(goMod, "github.com/qiniu/qmgo") {
-					t.Fatalf("full mode go.mod should contain qmgo dependency")
+				if !strings.Contains(goMod, "go.mongodb.org/mongo-driver/v2 v2.9.1") {
+					t.Fatalf("full mode go.mod should contain official mongo-driver/v2 dependency")
+				}
+				for _, forbidden := range []string{
+					"+incompatible",
+					"github.com/SisyphusSQ/golib",
+					"github.com/qiniu/qmgo",
+					"github.com/google/uuid",
+					"github.com/labstack/echo/v4",
+				} {
+					if strings.Contains(goMod, forbidden) {
+						t.Fatalf("full mode go.mod contains legacy dependency %q", forbidden)
+					}
 				}
 			},
 		},
@@ -263,6 +287,14 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 						stderr,
 					)
 				}
+				if unformatted, err := listUnformattedGoFiles(outputDir); err != nil {
+					t.Fatalf("gofmt check failed: %v", err)
+				} else if len(unformatted) > 0 {
+					t.Fatalf("generated Go files are not gofmt-formatted:\n%s", strings.Join(unformatted, "\n"))
+				}
+				if stdout, stderr, err := runGoCommand(outputDir, "test", "-race", "./..."); err != nil {
+					t.Fatalf("go test -race failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+				}
 				if stdout, stderr, err := runGoCommand(outputDir, "build", "./..."); err != nil {
 					t.Fatalf("go build failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 				}
@@ -274,6 +306,38 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 			tt.leakCheck(t, outputDir)
 		})
 	}
+}
+
+func listUnformattedGoFiles(dir string) ([]string, error) {
+	paths := make([]string, 0)
+	err := fs.WalkDir(os.DirFS(dir), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	})
+	if err != nil || len(paths) == 0 {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+	args := append([]string{"-l"}, paths...)
+	cmd := exec.CommandContext(ctx, "gofmt", args...)
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("gofmt: %w", ctx.Err())
+	}
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Fields(strings.TrimSpace(string(output)))
+	return lines, nil
 }
 
 func runGoCommand(dir string, args ...string) (string, string, error) {

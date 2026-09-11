@@ -43,7 +43,7 @@ func TestRootExecuteNewUsesDefaultDBFlag(t *testing.T) {
 	if !strings.Contains(modText, "gorm.io/gorm") {
 		t.Fatalf("default db should include mysql dependency, go.mod:\n%s", modText)
 	}
-	if !strings.Contains(modText, "github.com/qiniu/qmgo") {
+	if !strings.Contains(modText, "go.mongodb.org/mongo-driver/v2") {
 		t.Fatalf("default db should include mongodb dependency, go.mod:\n%s", modText)
 	}
 }

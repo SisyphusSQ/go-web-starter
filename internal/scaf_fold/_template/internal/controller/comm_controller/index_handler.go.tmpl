@@ -3,9 +3,9 @@ package comm_controller
 import (
 	"net/http"
 
-	"github.com/SisyphusSQ/golib/models/vo/base_vo"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 
+	"{{ .ModuleName }}/internal/models/vo"
 	"{{ .ModuleName }}/utils/timeutil"
 )
 
@@ -18,6 +18,6 @@ func InitIndexController(e *echo.Echo) {
 	e.GET("/", controller.Health)
 }
 
-func (i *IndexController) Health(c echo.Context) error {
-	return c.JSON(http.StatusOK, base_vo.SuccessResp(timeutil.CSTLayoutString()))
+func (i *IndexController) Health(c *echo.Context) error {
+	return c.JSON(http.StatusOK, vo.SuccessResp(timeutil.CSTLayoutString()))
 }

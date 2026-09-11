@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/api"
@@ -13,76 +15,74 @@ import (
 	"github.com/spf13/cast"
 
 	"{{ .ModuleName }}/config"
-	"{{ .ModuleName }}/internal/lib/log"
 )
 
 type PrometheusService interface {
-	QueryMemUsage(address string) (int, error)
-
-	queryVector(promql string) (promModel.Vector, error)
+	QueryMemUsage(ctx context.Context, address string) (int, error)
 }
 
 type PrometheusServiceImpl struct {
-	ctxTimeout time.Duration
-
-	url    string
-	client api.Client
-	v1api  v1.API
+	timeout time.Duration
+	v1api   v1.API
 }
 
-func NewPrometheusService(config config.Config) (PrometheusService, error) {
-	client, err := api.NewClient(api.Config{
-		Address: config.Prometheus.URL,
-	})
-	if err != nil {
-		log.Logger.Errorf("[PrometheusService.NewPrometheusService] url[%s] NewClient error: %v", config.Prometheus.URL, err)
-		return nil, err
+func NewPrometheusService(c config.Config) (PrometheusService, error) {
+	clientConfig := api.Config{Address: c.Prometheus.URL}
+	if c.Prometheus.Token != "" {
+		clientConfig.RoundTripper = bearerTransport{
+			base:  http.DefaultTransport,
+			token: c.Prometheus.Token,
+		}
 	}
-
-	log.Logger.Infof("[PrometheusService.NewPrometheusService] url[%s] init success", config.Prometheus.URL)
-	return &PrometheusServiceImpl{
-		ctxTimeout: 5 * time.Second,
-		url:        config.Prometheus.URL,
-		client:     client,
-		v1api:      v1.NewAPI(client),
-	}, nil
+	client, err := api.NewClient(clientConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create prometheus client: %w", err)
+	}
+	return &PrometheusServiceImpl{timeout: c.Prometheus.Timeout, v1api: v1.NewAPI(client)}, nil
 }
 
-func (p *PrometheusServiceImpl) QueryMemUsage(address string) (int, error) {
-	log.Logger.Debugf("[PrometheusService.QueryMemUsage] address[%s] start", address)
-	promqlFmt := `java_lang_Memory_HeapMemoryUsage_used{instance="%s"}/java_lang_Memory_HeapMemoryUsage_max{instance="%s"} * 100`
-	promql := fmt.Sprintf(promqlFmt, address, address)
-
-	vec, err := p.queryVector(promql)
+func (p *PrometheusServiceImpl) QueryMemUsage(ctx context.Context, address string) (int, error) {
+	if address == "" {
+		return 0, fmt.Errorf("prometheus instance address is required")
+	}
+	labelValue := strconv.Quote(address)
+	promQL := fmt.Sprintf(
+		`java_lang_Memory_HeapMemoryUsage_used{instance=%s}/java_lang_Memory_HeapMemoryUsage_max{instance=%s} * 100`,
+		labelValue,
+		labelValue,
+	)
+	vector, err := p.queryVector(ctx, promQL)
 	if err != nil {
-		log.Logger.Errorf("[PrometheusService.QueryMemUsage] address[%s] queryVector error: %v", address, err)
 		return 0, err
 	}
-
-	// vector must be one
-	if len(vec) == 0 {
-		log.Logger.Warnf("[PrometheusService.QueryMemUsage] address[%s] empty vector", address)
-		return 0, errors.New("empty vector")
+	if len(vector) == 0 {
+		return 0, errors.New("prometheus returned an empty vector")
 	}
-	usage := cast.ToInt(vec[0].Value)
-	log.Logger.Infof("[PrometheusService.QueryMemUsage] address[%s] usage[%d%%] success", address, usage)
-	return usage, nil
+	return cast.ToInt(vector[0].Value), nil
 }
 
-func (p *PrometheusServiceImpl) queryVector(promql string) (promModel.Vector, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.ctxTimeout)
+func (p *PrometheusServiceImpl) queryVector(ctx context.Context, promQL string) (promModel.Vector, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
-
-	res, _, err := p.v1api.Query(ctx, promql, time.Now())
+	result, _, err := p.v1api.Query(queryCtx, promQL, time.Now())
 	if err != nil {
-		log.Logger.Errorf("[PrometheusService.queryVector] promql[%s] query error: %v", promql, err)
-		return nil, err
+		return nil, fmt.Errorf("query prometheus: %w", err)
 	}
-
-	vector, ok := res.(promModel.Vector)
+	vector, ok := result.(promModel.Vector)
 	if !ok {
-		log.Logger.Errorf("[PrometheusService.queryVector] result type[%v] not Vector", reflect.TypeOf(res))
-		return nil, fmt.Errorf("query Vector Error: %v", reflect.TypeOf(res))
+		return nil, fmt.Errorf("expected prometheus vector, got %v", reflect.TypeOf(result))
 	}
 	return vector, nil
+}
+
+type bearerTransport struct {
+	base  http.RoundTripper
+	token string
+}
+
+func (t bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header = req.Header.Clone()
+	clone.Header.Set("Authorization", "Bearer "+t.token)
+	return t.base.RoundTrip(clone)
 }

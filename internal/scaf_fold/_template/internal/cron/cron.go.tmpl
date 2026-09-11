@@ -3,10 +3,12 @@ package cron
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/bsm/redislock"
 	"github.com/robfig/cron/v3"
+	"go.uber.org/fx"
 
 	"{{ .ModuleName }}/config"
 	"{{ .ModuleName }}/internal/lib/log"
@@ -14,128 +16,122 @@ import (
 	"{{ .ModuleName }}/utils"
 )
 
-const (
-	sampleTaskName      = "sample"
-	cacheMetricsTask    = "cache_metrics"
-	cacheMetricsCounter = "go_starter:cron:cache_metrics:counter"
-)
+const cacheMetricsCounter = "{{ .BinaryName }}:cron:cache_metrics:counter"
 
-type Service interface {
-	IP() string
+type service struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	ip      string
+	cron    *cron.Cron
+	cache   *redis.Client
+	locker  *redislock.Client
+	lockTTL time.Duration
 }
 
-type ServiceImpl struct {
-	ctx    context.Context
-	ip     string
-	cron   *cron.Cron
-	cache  *redis.Client
-	locker *redislock.Client
-}
-
-func NewCron(config config.Config, cache *redis.Client) (Service, error) {
-	if !config.Cron.On {
-		return &ServiceImpl{}, nil
+func NewCron(lifecycle fx.Lifecycle, cfg config.Config, cache *redis.Client) error {
+	if !cfg.Cron.On {
+		return nil
 	}
 	if cache == nil {
-		return nil, errors.New("redis client is nil")
+		return errors.New("redis client is nil")
 	}
 
-	log.Logger.Info("starting cron...")
 	timezone, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("load cron timezone: %w", err)
 	}
-
-	cronInstance := cron.New(
-		cron.WithSeconds(),
-		cron.WithLocation(timezone),
-		cron.WithLogger(cron.VerbosePrintfLogger(log.Logger)),
-		cron.WithChain(cron.Recover(cron.VerbosePrintfLogger(log.Logger))),
-	)
-
 	ip, err := utils.GetIP()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("resolve cron worker IP: %w", err)
 	}
-
-	s := &ServiceImpl{
-		ctx:   context.Background(),
-		ip:    ip,
-		cron:  cronInstance,
-		cache: cache,
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &service{
+		ctx:     ctx,
+		cancel:  cancel,
+		ip:      ip,
+		cron:    cron.New(
+			cron.WithSeconds(),
+			cron.WithLocation(timezone),
+			cron.WithLogger(cron.VerbosePrintfLogger(log.Logger)),
+			cron.WithChain(cron.Recover(cron.VerbosePrintfLogger(log.Logger))),
+		),
+		cache:   cache,
+		locker:  redislock.New(cache),
+		lockTTL: cfg.Cron.LockTTL,
 	}
-
-	s.locker = redislock.New(s.cache)
-
 	if _, err = s.cron.AddFunc("@every 30s", s.sample); err != nil {
-		return nil, err
+		cancel()
+		return fmt.Errorf("register sample cron: %w", err)
 	}
 	if _, err = s.cron.AddFunc("@every 1m", s.collectCacheMetrics); err != nil {
-		return nil, err
+		cancel()
+		return fmt.Errorf("register cache metrics cron: %w", err)
 	}
-	s.cron.Start()
-	return s, nil
+
+	lifecycle.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			log.Logger.Info("starting cron scheduler")
+			s.cron.Start()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			s.cancel()
+			stopped := s.cron.Stop()
+			select {
+			case <-stopped.Done():
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	})
+	return nil
 }
 
-func (s *ServiceImpl) IP() string {
-	return s.ip
-}
-
-func (s *ServiceImpl) sample() {
-	lock, skip := s.lock(sampleTaskName)
-	if skip {
+func (s *service) sample() {
+	lock, ok := s.obtainLock("sample")
+	if !ok {
 		return
 	}
-	defer func() {
-		if err := lock.Release(s.ctx); err != nil {
-			log.Logger.Warnf("release redis lock failed: %v", err)
-		}
-	}()
-
+	defer s.releaseLock(lock)
 	log.Logger.Infof("sample cron task executed on %s", s.ip)
 }
 
-// collectCacheMetrics demonstrates a cron task that writes lightweight
-// operational data to Redis without touching database dependencies.
-func (s *ServiceImpl) collectCacheMetrics() {
-	lock, skip := s.lock(cacheMetricsTask)
-	if skip {
+func (s *service) collectCacheMetrics() {
+	lock, ok := s.obtainLock("cache_metrics")
+	if !ok {
 		return
 	}
-	defer func() {
-		if err := lock.Release(s.ctx); err != nil {
-			log.Logger.Warnf("release redis lock failed: %v", err)
-		}
-	}()
+	defer s.releaseLock(lock)
 
 	count, err := s.cache.Incr(s.ctx, cacheMetricsCounter).Result()
 	if err != nil {
-		log.Logger.Errorf("collect cache metrics failed: %v", err)
+		log.Logger.Errorf("collect cache metrics: %v", err)
 		return
 	}
 	if err = s.cache.Expire(s.ctx, cacheMetricsCounter, 24*time.Hour).Err(); err != nil {
-		log.Logger.Errorf("set cache metrics ttl failed: %v", err)
+		log.Logger.Errorf("set cache metrics ttl: %v", err)
 		return
 	}
-
-	log.Logger.Infof(
-		"cache metrics cron task executed on %s, key=%s, count=%d",
-		s.ip,
-		cacheMetricsCounter,
-		count,
-	)
+	log.Logger.Infof("cache metrics collected on %s count=%d", s.ip, count)
 }
 
-func (s *ServiceImpl) lock(taskName string) (*redislock.Lock, bool) {
-	lock, err := s.locker.Obtain(s.ctx, taskName, 1*time.Second, nil)
+func (s *service) obtainLock(taskName string) (*redislock.Lock, bool) {
+	key := "{{ .BinaryName }}:cron:lock:" + taskName
+	lock, err := s.locker.Obtain(s.ctx, key, s.lockTTL, nil)
 	if err != nil {
 		if errors.Is(err, redislock.ErrNotObtained) {
-			log.Logger.Infof("task[%s] lock not obtained, skip on %s", taskName, s.ip)
-			return nil, true
+			log.Logger.Infof("cron lock not obtained task=%s worker=%s", taskName, s.ip)
+		} else {
+			log.Logger.Errorf("obtain cron lock task=%s worker=%s err=%v", taskName, s.ip, err)
 		}
-
-		log.Logger.Errorf("task[%s] obtain redis lock error on %s: %v", taskName, s.ip, err)
-		return nil, true
+		return nil, false
 	}
-	return lock, false
+	return lock, true
+}
+
+func (s *service) releaseLock(lock *redislock.Lock) {
+	if err := lock.Release(context.Background()); err != nil && !errors.Is(err, redislock.ErrLockNotHeld) {
+		log.Logger.Warnf("release cron lock: %v", err)
+	}
 }

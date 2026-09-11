@@ -1,0 +1,32 @@
+package common
+
+import "time"
+
+type ConfigKV struct {
+	ID        int64     `gorm:"primaryKey;column:id" json:"id"`
+	Key       string    `gorm:"column:config_key" json:"configKey"`
+	Value     string    `gorm:"column:config_value" json:"configValue"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updatedAt"`
+}
+
+func (ConfigKV) TableName() string {
+	return "common_config_kv"
+}
+
+type LarkMessageLog struct {
+	ID          int64     `gorm:"primaryKey;column:id" json:"id"`
+	UUID        string    `gorm:"column:uuid" json:"uuid"`
+	MessageID   string    `gorm:"column:message_id" json:"messageId"`
+	Contacts    string    `gorm:"column:contacts" json:"contacts"`
+	Status      int8      `gorm:"column:send_status" json:"sendStatus"`
+	FromMethod  string    `gorm:"column:from_method" json:"fromMethod"`
+	SendMessage string    `gorm:"column:send_message" json:"sendMessage"`
+	Response    string    `gorm:"column:response" json:"response"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt   time.Time `gorm:"column:updated_at" json:"updatedAt"`
+}
+
+func (LarkMessageLog) TableName() string {
+	return "lark_msg_log"
+}

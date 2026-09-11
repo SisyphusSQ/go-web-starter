@@ -12,10 +12,12 @@
   - `mongodb`
   - `mysql,mongodb`（默认）
 - 支持自定义模块名（`--module`）与二进制名（`--binary`）
+- 生成项目默认包含严格配置校验、资源生命周期管理、race 测试、CI 与非 root 容器镜像
+- 使用 Echo v5、MongoDB Driver v2 等稳定 module path，不生成 `+incompatible` 依赖
 
 ## 环境要求
 
-- Go `1.26.0` 或更高版本
+- Go `1.27.1` 或更高版本
 
 ## 构建与运行
 
@@ -76,8 +78,8 @@ go run ./app/main.go http
 ## 开发与验证
 
 ```bash
-# 默认测试（离线稳定）
-go test ./...
+# 默认 race 测试
+go test -race ./...
 
 # integration 测试（包含联网构建校验）
 go test -tags integration ./internal/scaf_fold -run TestGenerateE2EDBCombosIntegration -count=1

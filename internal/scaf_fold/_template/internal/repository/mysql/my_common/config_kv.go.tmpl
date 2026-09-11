@@ -2,32 +2,33 @@ package my_common
 
 import (
 	"context"
+	"errors"
 
 	gormv2 "{{ .ModuleName }}/internal/lib/gorm"
-
-	"github.com/SisyphusSQ/golib/models/do/base_do"
+	commonDo "{{ .ModuleName }}/internal/models/do/mysql/common"
 )
 
 type ConfigKVRepository interface {
-	GetByKey(ctx context.Context, k string) (kv base_do.ConfigKV, err error)
+	GetByKey(ctx context.Context, key string) (commonDo.ConfigKV, error)
 }
 
 type mysqlConfigKVRepo struct {
 	engine *gormv2.Engine
 }
 
-func NewConfigKVRepository(engine *gormv2.Engine) ConfigKVRepository {
+func NewConfigKVRepository(engine *gormv2.Engine) (ConfigKVRepository, error) {
 	if engine == nil {
-		panic("Database engine is null")
+		return nil, errors.New("database engine is nil")
 	}
 	return &mysqlConfigKVRepo{
 		engine: engine,
-	}
+	}, nil
 }
 
-func (m *mysqlConfigKVRepo) GetByKey(ctx context.Context, k string) (kv base_do.ConfigKV, err error) {
-	err = m.engine.Connect().WithContext(ctx).Table(base_do.ConfigKV{}.TableName()).
-		Where("config_key = ?", k).
-		Find(&kv).Error
-	return
+func (m *mysqlConfigKVRepo) GetByKey(ctx context.Context, key string) (commonDo.ConfigKV, error) {
+	var kv commonDo.ConfigKV
+	err := m.engine.Connect().WithContext(ctx).Table(commonDo.ConfigKV{}.TableName()).
+		Where("config_key = ?", key).
+		First(&kv).Error
+	return kv, err
 }

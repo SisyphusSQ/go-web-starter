@@ -2,22 +2,18 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 	"go.uber.org/zap/zapcore"
 )
 
-var (
-	configFile = "config/config.yml"
-	configType = "yml"
-)
-
 type (
 	Config struct {
-		Debug          bool   `mapstructure:"debug"`
-		ContextTimeout int    `mapstructure:"contextTimeout"`
-		Server         Server `mapstructure:"server"`
+		Debug          bool          `mapstructure:"debug"`
+		ContextTimeout time.Duration `mapstructure:"contextTimeout"`
+		Server         Server        `mapstructure:"server"`
 {{- if .MySQL }}
 		Database Database `mapstructure:"database"`
 {{- end }}
@@ -28,28 +24,35 @@ type (
 {{- if .MongoDB }}
 		MongoDB MongoDB `mapstructure:"mongodb"`
 {{- end }}
-		Prometheus Http `mapstructure:"prometheus"`
-		Lark       Lark `mapstructure:"lark"`
+		Prometheus HTTPClient `mapstructure:"prometheus"`
+		Lark       Lark       `mapstructure:"lark"`
 	}
 
 	Server struct {
-		Address string `mapstructure:"address"`
+		Address           string        `mapstructure:"address"`
+		ReadHeaderTimeout time.Duration `mapstructure:"readHeaderTimeout"`
+		ReadTimeout       time.Duration `mapstructure:"readTimeout"`
+		WriteTimeout      time.Duration `mapstructure:"writeTimeout"`
+		IdleTimeout       time.Duration `mapstructure:"idleTimeout"`
+		ShutdownTimeout   time.Duration `mapstructure:"shutdownTimeout"`
+		MaxBodyBytes      int64         `mapstructure:"maxBodyBytes"`
+		CORSOrigins       []string      `mapstructure:"corsOrigins"`
 	}
 
 {{- if .MySQL }}
 	Database struct {
-		Driver       string        `mapstructure:"driver"`
-		Host         string        `mapstructure:"host"`
-		Port         int           `mapstructure:"port"`
-		User         string        `mapstructure:"username"`
-		Password     string        `mapstructure:"password"`
-		Database     string        `mapstructure:"database"`
-		MaxIdleConns int           `mapstructure:"maxIdleConns"`
-		MaxLeftTime  time.Duration `mapstructure:"maxLeftTime"`
-		MaxOpenConns int           `mapstructure:"maxOpenConns"`
-		Charset      string        `mapstructure:"charset"`
-		TimeZone     string        `mapstructure:"timeZone"`
-		Name         string        `mapstructure:"name"`
+		Driver          string        `mapstructure:"driver"`
+		Host            string        `mapstructure:"host"`
+		Port            int           `mapstructure:"port"`
+		User            string        `mapstructure:"username"`
+		Password        string        `mapstructure:"password"`
+		Database        string        `mapstructure:"database"`
+		MaxIdleConns    int           `mapstructure:"maxIdleConns"`
+		MaxOpenConns    int           `mapstructure:"maxOpenConns"`
+		ConnMaxLifetime time.Duration `mapstructure:"connMaxLifetime"`
+		Charset         string        `mapstructure:"charset"`
+		TimeZone        string        `mapstructure:"timeZone"`
+		Name            string        `mapstructure:"name"`
 	}
 {{- end }}
 
@@ -62,8 +65,7 @@ type (
 	}
 
 	Key struct {
-		Type string `mapstructure:"type"`
-
+		Type  string    `mapstructure:"type"`
 		Basic BasicAuth `mapstructure:"basic"`
 		AK    AKAuth    `mapstructure:"ak"`
 		JWT   JWTConfig `mapstructure:"jwt"`
@@ -80,82 +82,234 @@ type (
 	}
 
 	JWTConfig struct {
-		Secret string `mapstructure:"secret"`
-		Expire int    `mapstructure:"expire"`
-		Issuer string `mapstructure:"issuer"`
+		Secret string        `mapstructure:"secret"`
+		Expire time.Duration `mapstructure:"expire"`
+		Issuer string        `mapstructure:"issuer"`
 	}
 
 	Cron struct {
-		On bool `mapstructure:"on"`
+		On      bool          `mapstructure:"on"`
+		LockTTL time.Duration `mapstructure:"lockTTL"`
 	}
 
 	Redis struct {
-		PoolConfig `yaml:"pool" mapstructure:"pool"`
+		PoolConfig `mapstructure:"pool"`
 
-		Name         string        `yaml:"name" mapstructure:"name"`
-		Proto        string        `yaml:"proto" mapstructure:"proto"`
-		Addr         string        `yaml:"addr" mapstructure:"addr"`
-		Auth         string        `yaml:"auth" mapstructure:"auth"`
-		DialTimeout  time.Duration `yaml:"dialTimeout" mapstructure:"dialTimeout"`
-		ReadTimeout  time.Duration `yaml:"readTimeout" mapstructure:"readTimeout"`
-		WriteTimeout time.Duration `yaml:"writeTimeout" mapstructure:"writeTimeout"`
-		DB           int           `yaml:"db" mapstructure:"db"`
-		SlowLog      time.Duration `yaml:"slowLog" mapstructure:"slowLog"`
+		Name         string        `mapstructure:"name"`
+		Proto        string        `mapstructure:"proto"`
+		Addr         string        `mapstructure:"addr"`
+		Auth         string        `mapstructure:"auth"`
+		DialTimeout  time.Duration `mapstructure:"dialTimeout"`
+		ReadTimeout  time.Duration `mapstructure:"readTimeout"`
+		WriteTimeout time.Duration `mapstructure:"writeTimeout"`
+		DB           int           `mapstructure:"db"`
+		SlowLog      time.Duration `mapstructure:"slowLog"`
 	}
 
 	PoolConfig struct {
-		Active      int           `yaml:"active" mapstructure:"active"`
-		Idle        int           `yaml:"idle" mapstructure:"idle"`
-		WaitTimeout time.Duration `yaml:"waitTimeout" mapstructure:"waitTimeout"`
-		Wait        bool          `yaml:"wait" mapstructure:"wait"`
+		Active      int           `mapstructure:"active"`
+		Idle        int           `mapstructure:"idle"`
+		WaitTimeout time.Duration `mapstructure:"waitTimeout"`
+		Wait        bool          `mapstructure:"wait"`
 	}
 
 {{- if .MongoDB }}
 	MongoDB struct {
-		URI        string `yaml:"uri" mapstructure:"uri"`
-		AuthSource string `yaml:"authSource" mapstructure:"authSource"`
-		User       string `yaml:"user" mapstructure:"user"`
-		Password   string `yaml:"password" mapstructure:"password"`
-		Database   string `yaml:"database" mapstructure:"database"`
-
-		MaxPoolSize uint64 `yaml:"maxPoolSize" mapstructure:"maxPoolSize"`
-		MinPoolSize uint64 `yaml:"minPoolSize" mapstructure:"minPoolSize"`
-
-		ConnectTimeoutMS int64 `yaml:"connectTimeoutMS" mapstructure:"connectTimeoutMS"`
-		SocketTimeoutMS  int64 `yaml:"socketTimeoutMS" mapstructure:"socketTimeoutMS"`
+		URI            string        `mapstructure:"uri"`
+		AuthSource     string        `mapstructure:"authSource"`
+		User           string        `mapstructure:"user"`
+		Password       string        `mapstructure:"password"`
+		Database       string        `mapstructure:"database"`
+		MaxPoolSize    uint64        `mapstructure:"maxPoolSize"`
+		MinPoolSize    uint64        `mapstructure:"minPoolSize"`
+		ConnectTimeout time.Duration `mapstructure:"connectTimeout"`
 	}
 {{- end }}
 
-	Http struct {
-		URL   string `yaml:"url" mapstructure:"url"`
-		Token string `yaml:"token" mapstructure:"token"`
+	HTTPClient struct {
+		URL     string        `mapstructure:"url"`
+		Token   string        `mapstructure:"token"`
+		Timeout time.Duration `mapstructure:"timeout"`
 	}
 
 	Lark struct {
-		AppID     string `yaml:"appID" mapstructure:"appID"`
-		AppSecret string `yaml:"appSecret" mapstructure:"appSecret"`
+		AppID     string        `mapstructure:"appID"`
+		AppSecret string        `mapstructure:"appSecret"`
+		Timeout   time.Duration `mapstructure:"timeout"`
 	}
 )
 
-func NewConfig() Config {
-	conf := &Config{}
-	err := viper.Unmarshal(conf)
-	if err != nil {
-		fmt.Printf("unable decode into config struct, %v", err)
+func Load(file string) (Config, error) {
+	v := viper.New()
+	v.SetConfigFile(file)
+	v.SetEnvPrefix("APP")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	if err := bindEnvironment(v); err != nil {
+		return Config{}, fmt.Errorf("bind environment: %w", err)
 	}
-	return *conf
+	if err := v.ReadInConfig(); err != nil {
+		return Config{}, fmt.Errorf("read config %q: %w", file, err)
+	}
+
+	var cfg Config
+	if err := v.UnmarshalExact(&cfg); err != nil {
+		return Config{}, fmt.Errorf("decode config %q: %w", file, err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, fmt.Errorf("validate config %q: %w", file, err)
+	}
+	return cfg, nil
 }
 
-func InitConfig() {
-	viper.SetConfigType(configType)
-	viper.SetConfigFile(configFile)
-
-	err := viper.ReadInConfig()
-	if err != nil {
-		fmt.Println(err.Error())
+func bindEnvironment(v *viper.Viper) error {
+	keys := []string{
+		"debug",
+		"contextTimeout",
+		"server.address",
+		"server.readHeaderTimeout",
+		"server.readTimeout",
+		"server.writeTimeout",
+		"server.idleTimeout",
+		"server.shutdownTimeout",
+		"server.maxBodyBytes",
+		"server.corsOrigins",
+		"key.type",
+		"key.basic.user",
+		"key.basic.password",
+		"key.ak.accessKey",
+		"key.ak.secretKey",
+		"key.jwt.secret",
+		"key.jwt.expire",
+		"key.jwt.issuer",
+		"redis.addr",
+		"redis.auth",
+		"redis.name",
+		"redis.proto",
+		"redis.db",
+		"redis.dialTimeout",
+		"redis.readTimeout",
+		"redis.writeTimeout",
+		"redis.slowLog",
+		"redis.pool.active",
+		"redis.pool.idle",
+		"redis.pool.waitTimeout",
+		"redis.pool.wait",
+		"cron.on",
+		"cron.lockTTL",
+		"log.fileName",
+		"log.logLevel",
+		"log.maxSizeMB",
+		"log.maxBackupCount",
+		"log.maxKeepDays",
+{{- if .MySQL }}
+		"database.driver",
+		"database.host",
+		"database.port",
+		"database.username",
+		"database.password",
+		"database.database",
+		"database.maxIdleConns",
+		"database.maxOpenConns",
+		"database.connMaxLifetime",
+		"database.charset",
+		"database.timeZone",
+		"database.name",
+{{- end }}
+{{- if .MongoDB }}
+		"mongodb.uri",
+		"mongodb.authSource",
+		"mongodb.user",
+		"mongodb.password",
+		"mongodb.database",
+		"mongodb.maxPoolSize",
+		"mongodb.minPoolSize",
+		"mongodb.connectTimeout",
+{{- end }}
+		"prometheus.url",
+		"prometheus.token",
+		"prometheus.timeout",
+		"lark.appID",
+		"lark.appSecret",
+		"lark.timeout",
 	}
+	for _, key := range keys {
+		if err := v.BindEnv(key); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func SetConfigFile(file string) {
-	configFile = file
+func (c Config) Validate() error {
+	if strings.TrimSpace(c.Server.Address) == "" {
+		return fmt.Errorf("server.address is required")
+	}
+	if c.ContextTimeout <= 0 {
+		return fmt.Errorf("contextTimeout must be positive")
+	}
+	if c.Server.ReadHeaderTimeout <= 0 || c.Server.ReadTimeout <= 0 || c.Server.WriteTimeout <= 0 || c.Server.IdleTimeout <= 0 {
+		return fmt.Errorf("server timeouts must be positive")
+	}
+	if c.Server.ShutdownTimeout <= 0 {
+		return fmt.Errorf("server.shutdownTimeout must be positive")
+	}
+	if c.Server.MaxBodyBytes <= 0 {
+		return fmt.Errorf("server.maxBodyBytes must be positive")
+	}
+	if len(c.Server.CORSOrigins) == 0 {
+		return fmt.Errorf("server.corsOrigins must contain at least one explicit origin")
+	}
+	if strings.TrimSpace(c.Redis.Addr) == "" {
+		return fmt.Errorf("redis.addr is required")
+	}
+	if c.Cron.On && c.Cron.LockTTL <= 0 {
+		return fmt.Errorf("cron.lockTTL must be positive when cron is enabled")
+	}
+	if c.Prometheus.URL != "" && c.Prometheus.Timeout <= 0 {
+		return fmt.Errorf("prometheus.timeout must be positive when prometheus is configured")
+	}
+	if c.Lark.Timeout <= 0 {
+		return fmt.Errorf("lark.timeout must be positive")
+	}
+{{- if .MySQL }}
+	if strings.TrimSpace(c.Database.Host) == "" || strings.TrimSpace(c.Database.User) == "" || strings.TrimSpace(c.Database.Database) == "" {
+		return fmt.Errorf("database host, username and database are required")
+	}
+{{- end }}
+{{- if .MongoDB }}
+	if !strings.HasPrefix(c.MongoDB.URI, "mongodb://") && !strings.HasPrefix(c.MongoDB.URI, "mongodb+srv://") {
+		return fmt.Errorf("mongodb.uri must start with mongodb:// or mongodb+srv://")
+	}
+	if strings.TrimSpace(c.MongoDB.Database) == "" {
+		return fmt.Errorf("mongodb.database is required")
+	}
+	if c.MongoDB.ConnectTimeout <= 0 {
+		return fmt.Errorf("mongodb.connectTimeout must be positive")
+	}
+{{- end }}
+
+	switch c.Key.Type {
+	case "none":
+		if !c.Debug {
+			return fmt.Errorf("key.type none is only allowed when debug is true")
+		}
+		return nil
+	case "basic":
+		if c.Key.Basic.User == "" || c.Key.Basic.Password == "" {
+			return fmt.Errorf("basic authentication requires user and password")
+		}
+	case "key":
+		if c.Key.AK.AccessKey == "" || c.Key.AK.SecretKey == "" {
+			return fmt.Errorf("key authentication requires accessKey and secretKey")
+		}
+	case "jwt":
+		if len(c.Key.JWT.Secret) < 32 || c.Key.JWT.Expire <= 0 || c.Key.JWT.Issuer == "" {
+			return fmt.Errorf("jwt authentication requires a secret of at least 32 bytes, a positive expire duration and issuer")
+		}
+	default:
+		return fmt.Errorf("unsupported key.type %q", c.Key.Type)
+	}
+	return nil
 }

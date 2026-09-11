@@ -1,0 +1,36 @@
+package vo
+
+import (
+	"net/http"
+
+	"github.com/labstack/echo/v5"
+
+	"{{ .ModuleName }}/utils"
+)
+
+type Response struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data"`
+}
+
+func SuccessResp(data any) Response {
+	return Response{Code: http.StatusOK, Message: "success", Data: data}
+}
+
+func ErrorResp(status int, message string) Response {
+	return Response{Code: status, Message: message}
+}
+
+func CommSuccResp(c *echo.Context, data any) error {
+	return c.JSON(http.StatusOK, SuccessResp(data))
+}
+
+func CommErrResp(c *echo.Context, err error) error {
+	status := utils.GetStatusCode(err)
+	message := err.Error()
+	if status >= http.StatusInternalServerError {
+		message = http.StatusText(http.StatusInternalServerError)
+	}
+	return c.JSON(status, Response{Code: status, Message: message})
+}
