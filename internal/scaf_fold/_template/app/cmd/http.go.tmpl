@@ -1,6 +1,12 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
@@ -13,7 +19,6 @@ import (
 	"{{ .ModuleName }}/internal/repository"
 	"{{ .ModuleName }}/internal/service"
 	"{{ .ModuleName }}/utils"
-	"{{ .ModuleName }}/vars"
 )
 
 var configure string
@@ -22,49 +27,44 @@ var (
 	httpCmd = &cobra.Command{
 		Use:   "http",
 		Short: "Start Http REST API",
-		Run:   initHTTP,
+		RunE:  initHTTP,
 	}
 )
 
-func initHTTP(cmd *cobra.Command, args []string) {
-	config.SetConfigFile(configure)
-	config.InitConfig()
-	c := config.NewConfig()
-	log.New(c)
-	defer log.Logger.Sync()
+func initHTTP(cmd *cobra.Command, _ []string) error {
+	c, err := config.Load(configure)
+	if err != nil {
+		return err
+	}
+	if err = log.New(c); err != nil {
+		return err
+	}
+	defer func() { _ = log.Sync() }()
 
-	switch c.Key.Type {
-	case "basic":
-		if c.Key.Basic.User != "" && c.Key.Basic.Password != "" {
-			vars.User = c.Key.Basic.User
-			vars.Password = c.Key.Basic.Password
-		} else {
-			panic("basic auth required")
-		}
-	case "key":
-		if c.Key.AK.SecretKey != "" && c.Key.AK.AccessKey != "" {
-			vars.SecretKey = c.Key.AK.SecretKey
-			vars.AccessKey = c.Key.AK.AccessKey
-		} else {
-			panic("key auth required")
-		}
-	case "jwt":
-		if c.Key.JWT.Secret == "" || c.Key.JWT.Expire <= 0 {
-			panic("jwt config required")
-		}
-	default:
-		panic("auth required")
+	app := fx.New(inject(c))
+	if err = app.Err(); err != nil {
+		return fmt.Errorf("build application graph: %w", err)
 	}
 
-	fx.New(inject()).Run()
+	runCtx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err = app.Start(runCtx); err != nil {
+		return fmt.Errorf("start application: %w", err)
+	}
+	<-runCtx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), c.Server.ShutdownTimeout)
+	defer cancel()
+	if err = app.Stop(shutdownCtx); err != nil {
+		return fmt.Errorf("stop application: %w", err)
+	}
+	return nil
 }
 
-func inject() fx.Option {
+func inject(c config.Config) fx.Option {
 	return fx.Options(
-		fx.Provide(
-			config.NewConfig,
-			utils.NewTimeoutContext,
-		),
+		fx.Supply(c),
+		fx.Provide(utils.NewTimeoutContext),
 		libs.GlobalModule,
 		repository.Module,
 		service.Module,

@@ -2,18 +2,22 @@ package scaf_fold
 
 import (
 	"fmt"
+	"go/format"
+	goversion "go/version"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"golang.org/x/mod/module"
 )
 
-const templateRoot = "_template"
-const fallbackGoVersion = "1.26.0"
+const (
+	templateRoot             = "_template"
+	stableGoVersion          = "1.27.1"
+	minimumTemplateGoVersion = "1.27.0"
+)
 
 type TemplateData struct {
 	ModuleName  string
@@ -25,11 +29,9 @@ type TemplateData struct {
 }
 
 var (
-	binaryNamePattern    = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	projectNamePattern   = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
-	goVersionPattern     = regexp.MustCompile(`^\d+\.\d+(?:\.\d+)?$`)
-	goVersionExtractExpr = regexp.MustCompile(`(\d+\.\d+(?:\.\d+)?)`)
-
+	binaryNamePattern         = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	projectNamePattern        = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	goVersionPattern          = regexp.MustCompile(`^\d+\.\d+(?:\.\d+)?$`)
 	mysqlOnlyTemplatePrefixes = []string{
 		templateRoot + "/internal/lib/gorm",
 		templateRoot + "/internal/lib/log/silent.go.tmpl",
@@ -151,6 +153,12 @@ func Generate(outputDir string, data TemplateData) error {
 			if err != nil {
 				return err
 			}
+			if filepath.Ext(outPath) == ".go" {
+				rendered, err = format.Source(rendered)
+				if err != nil {
+					return fmt.Errorf("format generated Go file %s: %w", outPath, err)
+				}
+			}
 
 			outParentDir := filepath.Dir(outPath)
 			if err := os.MkdirAll(outParentDir, 0o755); err != nil {
@@ -181,12 +189,7 @@ func (d *TemplateData) applyDefaults() {
 }
 
 func defaultGoVersion() string {
-	matches := goVersionExtractExpr.FindStringSubmatch(runtime.Version())
-	if len(matches) != 2 {
-		return fallbackGoVersion
-	}
-
-	return matches[1]
+	return stableGoVersion
 }
 
 func shouldSkipTemplate(path string, data TemplateData) bool {
@@ -336,9 +339,12 @@ func validateGoVersion(goVersion string) error {
 	}
 	if !goVersionPattern.MatchString(v) {
 		return fmt.Errorf(
-			"go version contains invalid format: %q (example: 1.26.0)",
+			"go version contains invalid format: %q (example: 1.27.1)",
 			goVersion,
 		)
+	}
+	if goversion.Compare("go"+v, "go"+minimumTemplateGoVersion) < 0 {
+		return fmt.Errorf("go version %q is below the template minimum %s", goVersion, minimumTemplateGoVersion)
 	}
 
 	return nil

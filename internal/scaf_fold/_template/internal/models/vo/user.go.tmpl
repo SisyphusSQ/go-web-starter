@@ -1,15 +1,20 @@
 package vo
 
-{{- if and .MySQL .MongoDB }}
 import (
+	"net/mail"
+	"strings"
+
+{{- if and .MySQL .MongoDB }}
 	mongoDo "{{ .ModuleName }}/internal/models/do/mongo/example_do"
 	mysqlDo "{{ .ModuleName }}/internal/models/do/mysql/example_do"
-)
 {{- else if .MySQL }}
-import mysqlDo "{{ .ModuleName }}/internal/models/do/mysql/example_do"
+	mysqlDo "{{ .ModuleName }}/internal/models/do/mysql/example_do"
 {{- else if .MongoDB }}
-import mongoDo "{{ .ModuleName }}/internal/models/do/mongo/example_do"
+	mongoDo "{{ .ModuleName }}/internal/models/do/mongo/example_do"
 {{- end }}
+
+	"{{ .ModuleName }}/utils"
+)
 
 type CreateUserReq struct {
 	Name     string `json:"name" validate:"required"`
@@ -22,14 +27,57 @@ type UpdateUserReq struct {
 	Email string `json:"email"`
 }
 
+{{- if .MongoDB }}
+type CreateMongoUserReq struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+func (r CreateMongoUserReq) Validate() error {
+	if strings.TrimSpace(r.Name) == "" || !validEmail(r.Email) {
+		return utils.ErrBadParamInput
+	}
+	return nil
+}
+{{- end }}
+
 type LoginReq struct {
 	Email    string `json:"email" validate:"required"`
 	Password string `json:"password" validate:"required"`
 }
 
 type LoginResp struct {
-	Token  string `json:"token"`
-	Expire int    `json:"expire"`
+	Token     string `json:"token"`
+	ExpiresIn int64  `json:"expiresIn"`
+}
+
+func (r CreateUserReq) Validate() error {
+	if strings.TrimSpace(r.Name) == "" || len(r.Password) < 8 || !validEmail(r.Email) {
+		return utils.ErrBadParamInput
+	}
+	return nil
+}
+
+func (r UpdateUserReq) Validate() error {
+	if strings.TrimSpace(r.Name) == "" && strings.TrimSpace(r.Email) == "" {
+		return utils.ErrBadParamInput
+	}
+	if r.Email != "" && !validEmail(r.Email) {
+		return utils.ErrBadParamInput
+	}
+	return nil
+}
+
+func (r LoginReq) Validate() error {
+	if r.Password == "" || !validEmail(r.Email) {
+		return utils.ErrBadParamInput
+	}
+	return nil
+}
+
+func validEmail(value string) bool {
+	address, err := mail.ParseAddress(value)
+	return err == nil && address.Address == value
 }
 
 {{- if .MySQL }}

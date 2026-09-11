@@ -1,19 +1,26 @@
-FROM golang:{{ .GoVersion }} AS builder
+FROM golang:{{ .GoVersion }}-alpine3.24 AS builder
 
-WORKDIR /app
-ENV GO111MODULE=on
-ENV GOPROXY=https://proxy.golang.org,direct
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
-RUN make build
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/{{ .BinaryName }} ./app/main.go
 
-FROM alpine:3.20
+FROM alpine:3.24.1
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -S app \
+    && adduser -S -G app app \
+    && mkdir -p /app/config /app/logs \
+    && chown -R app:app /app
+
 WORKDIR /app
+COPY --from=builder /out/{{ .BinaryName }} /app/{{ .BinaryName }}
+COPY --from=builder /src/config/config_docker.yml /app/config/config.yml
 
-RUN apk add --no-cache ca-certificates tzdata
-
-COPY --from=builder /app/bin/{{ .BinaryName }} /app/{{ .BinaryName }}
-COPY --from=builder /app/config/config_docker.yml /app/config/config.yml
-
-RUN chmod +x /app/{{ .BinaryName }}
-CMD ["/app/{{ .BinaryName }}", "http", "-c", "/app/config/config.yml"]
+USER app
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1
+ENTRYPOINT ["/app/{{ .BinaryName }}"]
+CMD ["http", "-c", "/app/config/config.yml"]

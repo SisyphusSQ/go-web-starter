@@ -1,17 +1,20 @@
 package redis
 
 import (
-	"time"
+	"context"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/fx"
 
 	"{{ .ModuleName }}/config"
 )
 
 // New 实例化新的redis v9
-func New(config config.Config) *Client {
-	conf := config.Redis
+func New(lifecycle fx.Lifecycle, c config.Config) (*Client, error) {
+	conf := c.Redis
 	rdb := redis.NewClient(&redis.Options{
+		Network:      conf.Proto,
 		Addr:         conf.Addr,
 		Password:     conf.Auth,
 		DB:           conf.DB,
@@ -19,9 +22,15 @@ func New(config config.Config) *Client {
 		ReadTimeout:  conf.ReadTimeout,
 		MinIdleConns: conf.Idle,
 		PoolSize:     conf.Active, //缩放连接数
-		PoolTimeout:  time.Duration(conf.WaitTimeout),
+		PoolTimeout:  conf.WaitTimeout,
 		DialTimeout:  conf.DialTimeout,
 	})
-	rdb.PoolStats()
-	return rdb
+	pingCtx, cancel := context.WithTimeout(context.Background(), c.ContextTimeout)
+	defer cancel()
+	if err := rdb.Ping(pingCtx).Err(); err != nil {
+		_ = rdb.Close()
+		return nil, fmt.Errorf("ping redis: %w", err)
+	}
+	lifecycle.Append(fx.Hook{OnStop: func(context.Context) error { return rdb.Close() }})
+	return rdb, nil
 }

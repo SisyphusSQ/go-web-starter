@@ -6,12 +6,18 @@ import (
 
 	gormv2 "{{ .ModuleName }}/internal/lib/gorm"
 {{- end }}
+{{- if .MongoDB }}
+	"{{ .ModuleName }}/internal/lib/mongodb"
+{{- end }}
 	"{{ .ModuleName }}/internal/lib/redis"
 )
 
 var GlobalModule = fx.Provide(
 {{- if .MySQL }}
 	gormv2.New,
+{{- end }}
+{{- if .MongoDB }}
+	mongodb.New,
 {{- end }}
 	redis.New,
 )

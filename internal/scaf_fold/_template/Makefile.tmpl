@@ -13,7 +13,7 @@ BUILD_FLAGS += -X '$(VARS_PKG).GitRemote=$(shell git config --get remote.origin.
 
 LDFLAGS = -ldflags="$(BUILD_FLAGS)"
 
-.PHONY: help all build release run test lint fmt tidy clean
+.PHONY: help all build release run test vet lint fmt tidy clean
 
 help:
 	@echo "Available targets:"
@@ -22,6 +22,7 @@ help:
 	@echo "  release  - Build release binary"
 	@echo "  run      - Run app"
 	@echo "  test     - Run tests"
+	@echo "  vet      - Run go vet"
 	@echo "  lint     - Run golangci-lint"
 	@echo "  fmt      - Run go fmt"
 	@echo "  tidy     - Run go mod tidy"
@@ -41,7 +42,10 @@ run:
 	$(GO) run ./app/main.go http
 
 test:
-	$(GO) test ./...
+	$(GO) test -race ./...
+
+vet:
+	$(GO) vet ./...
 
 lint:
 	golangci-lint run

@@ -2,31 +2,30 @@ package my_common
 
 import (
 	"context"
-
-	"github.com/SisyphusSQ/golib/models/do/base_do"
+	"errors"
 
 	gormv2 "{{ .ModuleName }}/internal/lib/gorm"
+	commonDo "{{ .ModuleName }}/internal/models/do/mysql/common"
 )
 
 type LarkMsgLogRepository interface {
-	CreateRecord(ctx context.Context, msg base_do.LarkMsgLog) (err error)
+	CreateRecord(ctx context.Context, msg commonDo.LarkMessageLog) error
 }
 
 type mysqlLarkMsgLogRepository struct {
 	engine *gormv2.Engine
 }
 
-func NewLarkMsgLogRepository(engine *gormv2.Engine) LarkMsgLogRepository {
+func NewLarkMsgLogRepository(engine *gormv2.Engine) (LarkMsgLogRepository, error) {
 	if engine == nil {
-		panic("Database engine is null")
+		return nil, errors.New("database engine is nil")
 	}
 	return &mysqlLarkMsgLogRepository{
 		engine: engine,
-	}
+	}, nil
 }
 
-func (m *mysqlLarkMsgLogRepository) CreateRecord(ctx context.Context, msg base_do.LarkMsgLog) (err error) {
-	err = m.engine.Connect().WithContext(ctx).Table(base_do.LarkMsgLog{}.TableName()).
+func (m *mysqlLarkMsgLogRepository) CreateRecord(ctx context.Context, msg commonDo.LarkMessageLog) error {
+	return m.engine.Connect().WithContext(ctx).Table(commonDo.LarkMessageLog{}.TableName()).
 		Create(&msg).Error
-	return
 }

@@ -2,10 +2,10 @@ package example_srv
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"{{ .ModuleName }}/internal/lib/log"
 	do "{{ .ModuleName }}/internal/models/do/mongo/example_do"
@@ -15,10 +15,9 @@ import (
 )
 
 type UserMongoService interface {
-	IsAvailable() bool
 	GetByID(ctx context.Context, id string) (*do.User, error)
 	List(ctx context.Context, page, pageSize int) (vo.UserMongoListResp, error)
-	Create(ctx context.Context, req vo.CreateUserReq) (*do.User, error)
+	Create(ctx context.Context, req vo.CreateMongoUserReq) (*do.User, error)
 	Update(ctx context.Context, id string, req vo.UpdateUserReq) (vo.UserMongoIDResp, error)
 	Delete(ctx context.Context, id string) (vo.UserMongoIDResp, error)
 }
@@ -28,38 +27,22 @@ type UserMongoServiceImpl struct {
 	contextTimeout time.Duration
 }
 
-func NewUserMongoService(repo example_repo.UserRepository, timeout time.Duration) UserMongoService {
+func NewUserMongoService(repo example_repo.UserRepository, timeout time.Duration) (UserMongoService, error) {
 	if repo == nil {
-		panic("UserRepository is nil")
+		return nil, errors.New("user repository is nil")
 	}
 	if timeout == 0 {
-		panic("Timeout is empty")
+		return nil, errors.New("context timeout must be positive")
 	}
 	return &UserMongoServiceImpl{
 		repo:           repo,
 		contextTimeout: timeout,
-	}
-}
-
-func (s *UserMongoServiceImpl) IsAvailable() bool {
-	return s.repo.IsAvailable()
-}
-
-func (s *UserMongoServiceImpl) ensureAvailable() error {
-	if s.repo.IsAvailable() {
-		return nil
-	}
-	return example_repo.ErrMongoUnavailable
+	}, nil
 }
 
 func (s *UserMongoServiceImpl) GetByID(ctx context.Context, id string) (user *do.User, err error) {
 	log.Logger.Debugf("[UserMongoSrv.GetByID] id[%s] start", id)
-	if err = s.ensureAvailable(); err != nil {
-		log.Logger.Warnf("[UserMongoSrv.GetByID] mongo unavailable")
-		return nil, err
-	}
-
-	objectID, err := primitive.ObjectIDFromHex(id)
+	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		log.Logger.Warnf("[UserMongoSrv.GetByID] id[%s] invalid objectID: %v", id, err)
 		return nil, utils.ErrBadParamInput
@@ -78,11 +61,6 @@ func (s *UserMongoServiceImpl) GetByID(ctx context.Context, id string) (user *do
 
 func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (resp vo.UserMongoListResp, err error) {
 	log.Logger.Debugf("[UserMongoSrv.List] page[%d] pageSize[%d] start", page, pageSize)
-	if err = s.ensureAvailable(); err != nil {
-		log.Logger.Warnf("[UserMongoSrv.List] mongo unavailable")
-		return resp, err
-	}
-
 	if err = vo.ValidateBaseList(page, pageSize); err != nil {
 		log.Logger.Warnf("[UserMongoSrv.List] page[%d] pageSize[%d] validate error: %v", page, pageSize, err)
 		return resp, err
@@ -92,7 +70,7 @@ func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (re
 	defer cancel()
 	offset := int64((page - 1) * pageSize)
 	limit := int64(pageSize)
-	cond := bson.M{"isDelete": bson.M{"$ne": true}}
+	cond := bson.M{"isDeleted": bson.M{"$ne": true}}
 	users, total, err := s.repo.GetByCondAndPage(ctx, cond, offset, limit)
 	if err != nil {
 		log.Logger.Errorf("[UserMongoSrv.List] page[%d] pageSize[%d] repo.GetByCondAndPage error: %v", page, pageSize, err)
@@ -106,13 +84,8 @@ func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (re
 	return resp, nil
 }
 
-func (s *UserMongoServiceImpl) Create(ctx context.Context, req vo.CreateUserReq) (user *do.User, err error) {
+func (s *UserMongoServiceImpl) Create(ctx context.Context, req vo.CreateMongoUserReq) (user *do.User, err error) {
 	log.Logger.Debugf("[UserMongoSrv.Create] email[%s] start", req.Email)
-	if err = s.ensureAvailable(); err != nil {
-		log.Logger.Warnf("[UserMongoSrv.Create] mongo unavailable")
-		return nil, err
-	}
-
 	if req.Name == "" || req.Email == "" {
 		log.Logger.Warnf("[UserMongoSrv.Create] invalid param")
 		return nil, utils.ErrBadParamInput
@@ -121,27 +94,22 @@ func (s *UserMongoServiceImpl) Create(ctx context.Context, req vo.CreateUserReq)
 	ctx, cancel := context.WithTimeout(ctx, s.contextTimeout)
 	defer cancel()
 	user = &do.User{
-		Name:     req.Name,
-		Email:    req.Email,
-		IsDelete: false,
+		Name:      req.Name,
+		Email:     req.Email,
+		IsDeleted: false,
 	}
 	err = s.repo.Create(ctx, user)
 	if err != nil {
 		log.Logger.Errorf("[UserMongoSrv.Create] email[%s] repo.Create error: %v", req.Email, err)
 		return nil, err
 	}
-	log.Logger.Infof("[UserMongoSrv.Create] email[%s] id[%s] success", req.Email, user.Id.Hex())
+	log.Logger.Infof("[UserMongoSrv.Create] email[%s] id[%s] success", req.Email, user.ID.Hex())
 	return user, nil
 }
 
 func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req vo.UpdateUserReq) (resp vo.UserMongoIDResp, err error) {
 	log.Logger.Debugf("[UserMongoSrv.Update] id[%s] start", id)
-	if err = s.ensureAvailable(); err != nil {
-		log.Logger.Warnf("[UserMongoSrv.Update] mongo unavailable")
-		return resp, err
-	}
-
-	objectID, err := primitive.ObjectIDFromHex(id)
+	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		log.Logger.Warnf("[UserMongoSrv.Update] id[%s] invalid objectID: %v", id, err)
 		return resp, utils.ErrBadParamInput
@@ -174,12 +142,7 @@ func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req vo.Upd
 
 func (s *UserMongoServiceImpl) Delete(ctx context.Context, id string) (resp vo.UserMongoIDResp, err error) {
 	log.Logger.Debugf("[UserMongoSrv.Delete] id[%s] start", id)
-	if err = s.ensureAvailable(); err != nil {
-		log.Logger.Warnf("[UserMongoSrv.Delete] mongo unavailable")
-		return resp, err
-	}
-
-	objectID, err := primitive.ObjectIDFromHex(id)
+	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
 		log.Logger.Warnf("[UserMongoSrv.Delete] id[%s] invalid objectID: %v", id, err)
 		return resp, utils.ErrBadParamInput

@@ -3,15 +3,13 @@ package utils
 import (
 	"errors"
 	"net/http"
-
-	"{{ .ModuleName }}/internal/lib/log"
 )
 
 var (
-	ErrInternalServerError = errors.New("Internal Server Error")
-	ErrNotFound            = errors.New("Not Found")
-	ErrConflict            = errors.New("Your Item already exist")
-	ErrBadParamInput       = errors.New("Param Invalid")
+	ErrInternalServerError = errors.New("internal server error")
+	ErrNotFound            = errors.New("not found")
+	ErrConflict            = errors.New("resource already exists")
+	ErrBadParamInput       = errors.New("invalid request parameters")
 )
 
 func GetStatusCode(err error) int {
@@ -19,8 +17,9 @@ func GetStatusCode(err error) int {
 		return http.StatusOK
 	}
 
-	log.Logger.Errorf("get err: %v", err)
 	switch {
+	case errors.Is(err, ErrBadParamInput):
+		return http.StatusBadRequest
 	case errors.Is(err, ErrInternalServerError):
 		return http.StatusInternalServerError
 	case errors.Is(err, ErrNotFound):

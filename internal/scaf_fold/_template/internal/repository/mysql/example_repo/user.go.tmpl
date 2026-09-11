@@ -6,6 +6,7 @@ import (
 
 	gormv2 "{{ .ModuleName }}/internal/lib/gorm"
 	do "{{ .ModuleName }}/internal/models/do/mysql/example_do"
+	"{{ .ModuleName }}/utils"
 )
 
 type UserRepository interface {
@@ -21,22 +22,28 @@ type mysqlUserRepository struct {
 	engine *gormv2.Engine
 }
 
-func NewUserRepository(engine *gormv2.Engine) UserRepository {
+func NewUserRepository(engine *gormv2.Engine) (UserRepository, error) {
 	if engine == nil {
-		panic("Database engine is null")
+		return nil, errors.New("database engine is nil")
 	}
-	return &mysqlUserRepository{engine: engine}
+	return &mysqlUserRepository{engine: engine}, nil
 }
 
 func (m *mysqlUserRepository) GetByID(ctx context.Context, id int64) (user do.User, err error) {
 	err = m.engine.Connect().WithContext(ctx).Table(do.User{}.TableName()).
 		Where("id = ?", id).First(&user).Error
+	if errors.Is(err, gormv2.ErrRecordNotFound) {
+		err = utils.ErrNotFound
+	}
 	return
 }
 
 func (m *mysqlUserRepository) GetByEmail(ctx context.Context, email string) (user do.User, err error) {
 	err = m.engine.Connect().WithContext(ctx).Table(do.User{}.TableName()).
 		Where("email = ?", email).First(&user).Error
+	if errors.Is(err, gormv2.ErrRecordNotFound) {
+		err = utils.ErrNotFound
+	}
 	return
 }
 
@@ -57,13 +64,25 @@ func (m *mysqlUserRepository) Create(ctx context.Context, user *do.User) (err er
 }
 
 func (m *mysqlUserRepository) UpdateByID(ctx context.Context, id int64, updates map[string]any) (err error) {
-	err = m.engine.Connect().WithContext(ctx).Table(do.User{}.TableName()).
-		Where("id = ?", id).Updates(updates).Error
-	return
+	result := m.engine.Connect().WithContext(ctx).Table(do.User{}.TableName()).
+		Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return utils.ErrNotFound
+	}
+	return nil
 }
 
 func (m *mysqlUserRepository) DeleteByID(ctx context.Context, id int64) (err error) {
-	err = m.engine.Connect().WithContext(ctx).Table(do.User{}.TableName()).
-		Where("id = ?", id).Delete(&do.User{}).Error
-	return
+	result := m.engine.Connect().WithContext(ctx).Table(do.User{}.TableName()).
+		Where("id = ?", id).Delete(&do.User{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return utils.ErrNotFound
+	}
+	return nil
 }
