@@ -3,16 +3,12 @@ package gormv2
 import (
 	"fmt"
 	"strings"
-	"time"
+
 
 	"{{ .ModuleName }}/config"
 )
 
 const (
-	defaultPort            = 3306
-	defaultMaxOpenConns    = 200
-	defaultMaxIdleConns    = 60
-	defaultConnMaxLifetime = 5 * time.Minute
 	defaultCharset         = "utf8mb4"
 	defaultTimeZone        = "Local"
 )
@@ -26,18 +22,6 @@ func normalizeConfig(conf config.Database) (config.Database, error) {
 	}
 	if strings.TrimSpace(conf.User) == "" || strings.TrimSpace(conf.Host) == "" || strings.TrimSpace(conf.Database) == "" {
 		return config.Database{}, fmt.Errorf("database username, host and database are required")
-	}
-	if conf.Port == 0 {
-		conf.Port = defaultPort
-	}
-	if conf.MaxIdleConns == 0 {
-		conf.MaxIdleConns = defaultMaxIdleConns
-	}
-	if conf.MaxOpenConns == 0 {
-		conf.MaxOpenConns = defaultMaxOpenConns
-	}
-	if conf.ConnMaxLifetime == 0 {
-		conf.ConnMaxLifetime = defaultConnMaxLifetime
 	}
 	if conf.Charset == "" {
 		conf.Charset = defaultCharset

@@ -38,9 +38,10 @@ func NewLarkService(c config.Config) LarkService {
 			c.Lark.AppID,
 			c.Lark.AppSecret,
 			lark.WithLogger(log.LarkLogger),
-			lark.WithLogLevel(larkcore.LogLevelInfo),
+			lark.WithLogLevel(larkcore.LogLevelWarn),
+ lark.WithHttpClient(&http.Client{Timeout:c.Lark.Timeout,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}),
 		),
-		botClient: &http.Client{Timeout: c.Lark.Timeout},
+		botClient: &http.Client{Timeout: c.Lark.Timeout,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}},
 	}
 }
 
@@ -65,7 +66,7 @@ func (s *LarkServiceImpl) SendBotMessage(ctx context.Context, title string, cont
 
 	resp, err := s.botClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send lark bot request: %w", err)
+		return errors.New("send lark bot request failed")
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

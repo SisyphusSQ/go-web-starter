@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SisyphusSQ/go-web-starter/vars"
+	"github.com/SisyphusSQ/go-web-starter/v2/vars"
 )
 
 var versionCmd = &cobra.Command{

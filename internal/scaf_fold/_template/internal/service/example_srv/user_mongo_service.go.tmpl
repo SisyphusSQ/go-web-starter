@@ -15,9 +15,9 @@ import (
 )
 
 type UserMongoService interface {
-	GetByID(ctx context.Context, id string) (*do.User, error)
+	GetByID(ctx context.Context, id string) (vo.MongoUserView, error)
 	List(ctx context.Context, page, pageSize int) (vo.UserMongoListResp, error)
-	Create(ctx context.Context, req vo.CreateMongoUserReq) (*do.User, error)
+	Create(ctx context.Context, req vo.CreateMongoUserReq) (vo.MongoUserView, error)
 	Update(ctx context.Context, id string, req vo.UpdateUserReq) (vo.UserMongoIDResp, error)
 	Delete(ctx context.Context, id string) (vo.UserMongoIDResp, error)
 }
@@ -31,7 +31,7 @@ func NewUserMongoService(repo example_repo.UserRepository, timeout time.Duration
 	if repo == nil {
 		return nil, errors.New("user repository is nil")
 	}
-	if timeout == 0 {
+	if timeout <= 0 {
 		return nil, errors.New("context timeout must be positive")
 	}
 	return &UserMongoServiceImpl{
@@ -40,29 +40,17 @@ func NewUserMongoService(repo example_repo.UserRepository, timeout time.Duration
 	}, nil
 }
 
-func (s *UserMongoServiceImpl) GetByID(ctx context.Context, id string) (user *do.User, err error) {
-	log.Logger.Debugf("[UserMongoSrv.GetByID] id[%s] start", id)
-	objectID, err := bson.ObjectIDFromHex(id)
-	if err != nil {
-		log.Logger.Warnf("[UserMongoSrv.GetByID] id[%s] invalid objectID: %v", id, err)
-		return nil, utils.ErrBadParamInput
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, s.contextTimeout)
-	defer cancel()
-	user, err = s.repo.GetByID(ctx, objectID)
-	if err != nil {
-		log.Logger.Errorf("[UserMongoSrv.GetByID] id[%s] repo.GetByID error: %v", id, err)
-		return nil, err
-	}
-	log.Logger.Infof("[UserMongoSrv.GetByID] id[%s] success", id)
-	return user, nil
+func (s *UserMongoServiceImpl) view(user *do.User)vo.MongoUserView{return vo.MongoUserView{ID:user.ID.Hex(),Name:user.Name,Email:user.Email}}
+func (s *UserMongoServiceImpl) GetByID(ctx context.Context,id string)(vo.MongoUserView,error){
+ objectID,err:=bson.ObjectIDFromHex(id);if err!=nil{return vo.MongoUserView{},utils.ErrBadParamInput}
+ ctx,cancel:=context.WithTimeout(ctx,s.contextTimeout);defer cancel()
+ user,err:=s.repo.GetByID(ctx,objectID);if err!=nil{return vo.MongoUserView{},err};return s.view(user),nil
 }
 
 func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (resp vo.UserMongoListResp, err error) {
-	log.Logger.Debugf("[UserMongoSrv.List] page[%d] pageSize[%d] start", page, pageSize)
+	log.FromContext(ctx).Debugf("[UserMongoSrv.List] page[%d] pageSize[%d] start", page, pageSize)
 	if err = vo.ValidateBaseList(page, pageSize); err != nil {
-		log.Logger.Warnf("[UserMongoSrv.List] page[%d] pageSize[%d] validate error: %v", page, pageSize, err)
+		log.FromContext(ctx).Warnf("[UserMongoSrv.List] page[%d] pageSize[%d] validate error: %v", page, pageSize, err)
 		return resp, err
 	}
 
@@ -73,48 +61,34 @@ func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (re
 	cond := bson.M{"isDeleted": bson.M{"$ne": true}}
 	users, total, err := s.repo.GetByCondAndPage(ctx, cond, offset, limit)
 	if err != nil {
-		log.Logger.Errorf("[UserMongoSrv.List] page[%d] pageSize[%d] repo.GetByCondAndPage error: %v", page, pageSize, err)
+		log.FromContext(ctx).Error("user list failed")
 		return resp, err
 	}
-	resp = vo.UserMongoListResp{
+	views:=make([]vo.MongoUserView,0,len(users));for _,user:=range users{views=append(views,s.view(user))}
+resp = vo.UserMongoListResp{
 		Total: total,
-		List:  users,
+		List:  views,
 	}
-	log.Logger.Infof("[UserMongoSrv.List] page[%d] pageSize[%d] total[%d] success", page, pageSize, total)
+	log.FromContext(ctx).Infof("[UserMongoSrv.List] page[%d] pageSize[%d] total[%d] success", page, pageSize, total)
 	return resp, nil
 }
 
-func (s *UserMongoServiceImpl) Create(ctx context.Context, req vo.CreateMongoUserReq) (user *do.User, err error) {
-	log.Logger.Debugf("[UserMongoSrv.Create] email[%s] start", req.Email)
-	if req.Name == "" || req.Email == "" {
-		log.Logger.Warnf("[UserMongoSrv.Create] invalid param")
-		return nil, utils.ErrBadParamInput
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, s.contextTimeout)
-	defer cancel()
-	user = &do.User{
-		Name:      req.Name,
-		Email:     req.Email,
-		IsDeleted: false,
-	}
-	err = s.repo.Create(ctx, user)
-	if err != nil {
-		log.Logger.Errorf("[UserMongoSrv.Create] email[%s] repo.Create error: %v", req.Email, err)
-		return nil, err
-	}
-	log.Logger.Infof("[UserMongoSrv.Create] email[%s] id[%s] success", req.Email, user.ID.Hex())
-	return user, nil
+func (s *UserMongoServiceImpl) Create(ctx context.Context,req vo.CreateMongoUserReq)(vo.MongoUserView,error){
+ if err:=req.Validate();err!=nil{return vo.MongoUserView{},err}
+ ctx,cancel:=context.WithTimeout(ctx,s.contextTimeout);defer cancel()
+ user:=&do.User{Name:req.Name,Email:req.Email}
+ if err:=s.repo.Create(ctx,user);err!=nil{return vo.MongoUserView{},err};return s.view(user),nil
 }
 
 func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req vo.UpdateUserReq) (resp vo.UserMongoIDResp, err error) {
-	log.Logger.Debugf("[UserMongoSrv.Update] id[%s] start", id)
+	log.FromContext(ctx).Debugf("[UserMongoSrv.Update] id[%s] start", id)
 	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
-		log.Logger.Warnf("[UserMongoSrv.Update] id[%s] invalid objectID: %v", id, err)
+		log.FromContext(ctx).Warnf("[UserMongoSrv.Update] id[%s] invalid objectID: %v", id, err)
 		return resp, utils.ErrBadParamInput
 	}
 
+	if err:=req.Validate();err!=nil{return resp,err}
 	updates := bson.M{}
 	if req.Name != "" {
 		updates["name"] = req.Name
@@ -123,40 +97,40 @@ func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req vo.Upd
 		updates["email"] = req.Email
 	}
 	if len(updates) == 0 {
-		log.Logger.Warnf("[UserMongoSrv.Update] id[%s] no valid updates", id)
+		log.FromContext(ctx).Warnf("[UserMongoSrv.Update] id[%s] no valid updates", id)
 		return resp, utils.ErrBadParamInput
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, s.contextTimeout)
 	defer cancel()
 	if err = s.repo.UpdateByID(ctx, objectID, updates); err != nil {
-		log.Logger.Errorf("[UserMongoSrv.Update] id[%s] repo.UpdateByID error: %v", id, err)
+		log.FromContext(ctx).Error("user update failed")
 		return resp, err
 	}
 	resp = vo.UserMongoIDResp{
 		ID: id,
 	}
-	log.Logger.Infof("[UserMongoSrv.Update] id[%s] success", id)
+	log.FromContext(ctx).Infof("[UserMongoSrv.Update] id[%s] success", id)
 	return resp, nil
 }
 
 func (s *UserMongoServiceImpl) Delete(ctx context.Context, id string) (resp vo.UserMongoIDResp, err error) {
-	log.Logger.Debugf("[UserMongoSrv.Delete] id[%s] start", id)
+	log.FromContext(ctx).Debugf("[UserMongoSrv.Delete] id[%s] start", id)
 	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
-		log.Logger.Warnf("[UserMongoSrv.Delete] id[%s] invalid objectID: %v", id, err)
+		log.FromContext(ctx).Warnf("[UserMongoSrv.Delete] id[%s] invalid objectID: %v", id, err)
 		return resp, utils.ErrBadParamInput
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, s.contextTimeout)
 	defer cancel()
 	if err = s.repo.DeleteByID(ctx, objectID); err != nil {
-		log.Logger.Errorf("[UserMongoSrv.Delete] id[%s] repo.DeleteByID error: %v", id, err)
+		log.FromContext(ctx).Error("user delete failed")
 		return resp, err
 	}
 	resp = vo.UserMongoIDResp{
 		ID: id,
 	}
-	log.Logger.Infof("[UserMongoSrv.Delete] id[%s] success", id)
+	log.FromContext(ctx).Infof("[UserMongoSrv.Delete] id[%s] success", id)
 	return resp, nil
 }

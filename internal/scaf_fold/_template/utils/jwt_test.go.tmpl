@@ -28,7 +28,7 @@ func TestTokenRoundTrip(t *testing.T) {
 	}
 }
 
-func TestParseTokenRejectsWrongAlgorithmAndIssuer(t *testing.T) {
+func TestParseTokenRejectsWrongAlgorithm(t *testing.T) {
 	claims := &Claims{RegisteredClaims: jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		Issuer:    "test-service",
@@ -41,4 +41,20 @@ func TestParseTokenRejectsWrongAlgorithmAndIssuer(t *testing.T) {
 	if _, err = ParseToken(token, "0123456789abcdef0123456789abcdef", "test-service"); err == nil {
 		t.Fatal("ParseToken() accepted HS384")
 	}
+}
+
+func TestTokenRotationAndClaims(t *testing.T){
+ cfg:=config.JWTConfig{Secret:UUID(),Expire:time.Hour,Issuer:"test-service"}
+ first,err:=GenerateToken(42,"user@example.com",cfg);if err!=nil{t.Fatal(err)}
+ second,err:=GenerateToken(42,"user@example.com",cfg);if err!=nil{t.Fatal(err)}
+ if first==second{t.Fatal("new session reused previous token")}
+ if _,err:=ParseToken(first,cfg.Secret,"different-service");err==nil{t.Fatal("wrong issuer accepted")}
+ for _,claims:=range []Claims{
+  {RegisteredClaims:jwt.RegisteredClaims{Issuer:cfg.Issuer}},
+  {RegisteredClaims:jwt.RegisteredClaims{Issuer:cfg.Issuer,ExpiresAt:jwt.NewNumericDate(time.Now().Add(-time.Minute))}},
+  {RegisteredClaims:jwt.RegisteredClaims{Issuer:cfg.Issuer,ExpiresAt:jwt.NewNumericDate(time.Now().Add(time.Hour)),NotBefore:jwt.NewNumericDate(time.Now().Add(time.Minute))}},
+ }{
+  token,err:=jwt.NewWithClaims(jwt.SigningMethodHS256,claims).SignedString([]byte(cfg.Secret));if err!=nil{t.Fatal(err)}
+  if _,err:=ParseToken(token,cfg.Secret,cfg.Issuer);err==nil{t.Fatal("invalid temporal claims accepted")}
+ }
 }

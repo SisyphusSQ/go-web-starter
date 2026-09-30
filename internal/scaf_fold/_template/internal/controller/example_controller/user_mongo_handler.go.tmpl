@@ -60,10 +60,7 @@ func (u *UserMongoController) List(c *echo.Context) error {
 
 func (u *UserMongoController) Create(c *echo.Context) error {
 	var req vo.CreateMongoUserReq
-	if err := c.Bind(&req); err != nil {
-		return vo.CommErrResp(c, utils.ErrBadParamInput)
-	}
-	if err := req.Validate(); err != nil {
+	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
 
@@ -78,10 +75,7 @@ func (u *UserMongoController) Update(c *echo.Context) error {
 	id := c.Param("id")
 
 	var req vo.UpdateUserReq
-	if err := c.Bind(&req); err != nil {
-		return vo.CommErrResp(c, utils.ErrBadParamInput)
-	}
-	if err := req.Validate(); err != nil {
+	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
 

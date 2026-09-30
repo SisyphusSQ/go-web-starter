@@ -4,14 +4,14 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+"{{ .ModuleName }}/vars"
 )
 
 var (
-	Version = "1.0.0"
-
 	rootCmd = &cobra.Command{
 		Use:     "{{ .BinaryName }}",
-		Version: Version,
+		Version: vars.AppVersion,
 		Short:   "{{ .BinaryName }} Management CLI",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return httpCmd.RunE(cmd, args)

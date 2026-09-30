@@ -1,16 +1,20 @@
 package scaf_fold
 
 import (
+	"errors"
 	"fmt"
 	"go/format"
 	goversion "go/version"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/mod/module"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -20,12 +24,21 @@ const (
 )
 
 type TemplateData struct {
-	ModuleName  string
-	BinaryName  string
-	ProjectName string
-	GoVersion   string
-	MySQL       bool
-	MongoDB     bool
+	ModuleName    string
+	BinaryName    string
+	ProjectName   string
+	GoVersion     string
+	AppVersion    string
+	MySQL         bool
+	MongoDB       bool
+	Redis         bool
+	Cron          bool
+	Lark          bool
+	Prometheus    bool
+	JWT           bool
+	Examples      bool
+	IssueProvider string
+	IssuePrefix   string
 }
 
 var (
@@ -39,7 +52,6 @@ var (
 		templateRoot + "/internal/models/do/mysql",
 		templateRoot + "/internal/controller/example_controller/user_handler.go.tmpl",
 		templateRoot + "/internal/service/example_srv/user_service.go.tmpl",
-		templateRoot + "/docs/schema",
 	}
 	mongoOnlyTemplatePrefixes = []string{
 		templateRoot + "/internal/lib/mongodb",
@@ -51,6 +63,9 @@ var (
 )
 
 func (d TemplateData) Validate() error {
+	if d.AppVersion != "" && d.AppVersion != "dev" && !semver.IsValid(d.AppVersion) {
+		return fmt.Errorf("invalid application version %q", d.AppVersion)
+	}
 	if err := validateModulePath(d.ModuleName); err != nil {
 		return err
 	}
@@ -68,8 +83,19 @@ func (d TemplateData) Validate() error {
 	if err := validateGoVersion(goVersion); err != nil {
 		return err
 	}
-	if !d.MySQL && !d.MongoDB {
-		return fmt.Errorf("at least one database must be enabled")
+	if d.JWT && !d.Redis {
+		return fmt.Errorf("jwt requires redis")
+	}
+	if d.Examples && !d.MySQL && !d.MongoDB {
+		return fmt.Errorf("user examples require mysql or mongodb")
+	}
+	switch d.IssueProvider {
+	case "", "linear", "github", "gitlab", "repo", "other":
+	default:
+		return fmt.Errorf("unsupported issue provider %q", d.IssueProvider)
+	}
+	if d.IssuePrefix != "" && !regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`).MatchString(d.IssuePrefix) {
+		return fmt.Errorf("invalid issue prefix")
 	}
 
 	return nil
@@ -80,6 +106,9 @@ func ParseDBFlag(val string) (mysql, mongodb bool, err error) {
 }
 
 func parseDBFlag(val string) (mysql, mongodb bool, err error) {
+	if strings.EqualFold(strings.TrimSpace(val), "none") {
+		return false, false, nil
+	}
 	for _, rawToken := range strings.Split(val, ",") {
 		token := strings.ToLower(strings.TrimSpace(rawToken))
 		if token == "" {
@@ -93,7 +122,7 @@ func parseDBFlag(val string) (mysql, mongodb bool, err error) {
 			mongodb = true
 		default:
 			return false, false, fmt.Errorf(
-				"invalid db value %q: allowed values are mysql,mongodb",
+				"invalid db value %q: allowed values are none,mysql,mongodb",
 				rawToken,
 			)
 		}
@@ -107,84 +136,88 @@ func parseDBFlag(val string) (mysql, mongodb bool, err error) {
 }
 
 func Generate(outputDir string, data TemplateData) error {
+	outputDir = filepath.Clean(outputDir)
 	data.applyDefaults()
 	if err := data.Validate(); err != nil {
 		return fmt.Errorf("invalid template data: %w", err)
 	}
 
+	files := make(map[string][]byte)
+	if err := fs.WalkDir(templateFS, templateRoot, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == templateRoot {
+			return nil
+		}
+		if shouldSkipTemplate(path, data) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel := strings.TrimSuffix(strings.TrimPrefix(path, templateRoot+"/"), ".tmpl")
+		raw, err := templateFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rendered, err := renderTemplate(path, raw, data)
+		if err != nil {
+			return err
+		}
+		if filepath.Ext(rel) == ".go" {
+			rendered, err = format.Source(rendered)
+			if err != nil {
+				return fmt.Errorf("format %s: %w", path, err)
+			}
+		}
+		files[rel] = rendered
+		return nil
+	}); err != nil {
+		return fmt.Errorf("render project: %w", err)
+	}
+	manifest, err := buildManifest(data, files)
+	if err != nil {
+		return err
+	}
+	files[".starter.json"] = manifest
 	if err := prepareOutputDir(outputDir); err != nil {
 		return err
 	}
-
-	if err := fs.WalkDir(
-		templateFS,
-		templateRoot,
-		func(path string, d fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return fmt.Errorf("walk template path %s: %w", path, walkErr)
-			}
-			if path == templateRoot {
-				return nil
-			}
-
-			if shouldSkipTemplate(path, data) {
-				if d.IsDir() {
-					return fs.SkipDir
-				}
-				return nil
-			}
-
-			relPath := strings.TrimPrefix(path, templateRoot+"/")
-			outRelPath := strings.TrimSuffix(relPath, ".tmpl")
-			outPath := filepath.Join(outputDir, filepath.FromSlash(outRelPath))
-
-			if d.IsDir() {
-				if err := os.MkdirAll(outPath, 0o755); err != nil {
-					return fmt.Errorf("create directory %s: %w", outPath, err)
-				}
-				return nil
-			}
-
-			raw, err := templateFS.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("read template file %s: %w", path, err)
-			}
-			rendered, err := renderTemplate(path, raw, data)
-			if err != nil {
-				return err
-			}
-			if filepath.Ext(outPath) == ".go" {
-				rendered, err = format.Source(rendered)
-				if err != nil {
-					return fmt.Errorf("format generated Go file %s: %w", outPath, err)
-				}
-			}
-
-			outParentDir := filepath.Dir(outPath)
-			if err := os.MkdirAll(outParentDir, 0o755); err != nil {
-				return fmt.Errorf(
-					"create output parent directory %s for file %s: %w",
-					outParentDir,
-					outPath,
-					err,
-				)
-			}
-			if err := os.WriteFile(outPath, rendered, 0o644); err != nil {
-				return fmt.Errorf("write output file %s: %w", outPath, err)
-			}
-
-			return nil
-		},
-	); err != nil {
-		return fmt.Errorf("walk templates: %w", err)
+	root, err := os.OpenRoot(outputDir)
+	if err != nil {
+		return err
 	}
-
+	defer root.Close()
+	for _, path := range slices.Sorted(maps.Keys(files)) {
+		if err := root.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		file, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", path, err)
+		}
+		_, writeErr := file.Write(files[path])
+		closeErr := file.Close()
+		if err := errors.Join(writeErr, closeErr); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+	}
 	return nil
 }
 
 func (d *TemplateData) applyDefaults() {
+	if d.AppVersion == "" {
+		d.AppVersion = "dev"
+	}
 	if strings.TrimSpace(d.GoVersion) == "" {
 		d.GoVersion = defaultGoVersion()
+	}
+	if d.IssueProvider == "" {
+		d.IssueProvider = "linear"
 	}
 }
 
@@ -194,6 +227,31 @@ func defaultGoVersion() string {
 
 func shouldSkipTemplate(path string, data TemplateData) bool {
 	path = filepath.ToSlash(path)
+	rel := strings.TrimPrefix(path, templateRoot+"/")
+	if !data.Examples && (strings.Contains(rel, "/example_") || rel == "internal/models/vo/user.go.tmpl") {
+		return true
+	}
+	if data.IssueProvider != "repo" && strings.HasPrefix(rel, "docs/issues") {
+		return true
+	}
+	if strings.HasPrefix(rel, "internal/controller/comm_controller") || strings.HasPrefix(rel, "internal/repository/mysql/my_common") || strings.HasPrefix(rel, "internal/models/do/mysql/common") {
+		return true
+	}
+	optional := []struct {
+		enabled bool
+		paths   []string
+	}{
+		{data.Redis, []string{"internal/lib/redis"}},
+		{data.Cron, []string{"internal/cron"}},
+		{data.Lark, []string{"internal/service/common_srv/lark_service.go.tmpl", "internal/models/dto/lark.go.tmpl", "internal/lib/log/lark_logger.go.tmpl"}},
+		{data.Prometheus, []string{"internal/service/common_srv/prometheus_service.go.tmpl"}},
+		{data.JWT, []string{"utils/jwt.go.tmpl", "utils/jwt_test.go.tmpl"}},
+	}
+	for _, feature := range optional {
+		if !feature.enabled && anyTemplatePrefixMatches(rel, feature.paths) {
+			return true
+		}
+	}
 	if !data.MySQL && anyTemplatePrefixMatches(path, mysqlOnlyTemplatePrefixes) {
 		return true
 	}
@@ -219,8 +277,11 @@ func anyTemplatePrefixMatches(path string, prefixes []string) bool {
 }
 
 func prepareOutputDir(outputDir string) error {
-	info, err := os.Stat(outputDir)
+	info, err := os.Lstat(outputDir)
 	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("output directory must not be a symlink: %s", outputDir)
+		}
 		if !info.IsDir() {
 			return fmt.Errorf("output path is not a directory: %s", outputDir)
 		}

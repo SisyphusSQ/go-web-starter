@@ -8,13 +8,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SisyphusSQ/go-web-starter/internal/scaf_fold"
+	"github.com/SisyphusSQ/go-web-starter/v2/internal/scaf_fold"
 )
 
 var (
-	moduleNameFlag string
-	binaryNameFlag string
-	dbFlag         string
+	moduleNameFlag    string
+	binaryNameFlag    string
+	dbFlag            string
+	withFlag          string
+	examplesFlag      bool
+	issueProviderFlag string
+	issuePrefixFlag   string
 )
 
 var newCmd = &cobra.Command{
@@ -30,6 +34,13 @@ var newCmd = &cobra.Command{
 			dbFlag,
 		)
 		if err != nil {
+			return err
+		}
+
+		data.Examples = examplesFlag
+		data.IssueProvider = issueProviderFlag
+		data.IssuePrefix = issuePrefixFlag
+		if err := data.SetFeatures(withFlag); err != nil {
 			return err
 		}
 
@@ -61,10 +72,14 @@ func initNew() {
 	newCmd.Flags().StringVar(
 		&dbFlag,
 		"db",
-		"mysql,mongodb",
-		"Database engines: mysql, mongodb, or mysql,mongodb",
+		"none",
+		"Database engines: none, mysql, mongodb, or mysql,mongodb",
 	)
 
+	newCmd.Flags().StringVar(&withFlag, "with", "", "Optional components: redis,cron,lark,prometheus-query,jwt")
+	newCmd.Flags().BoolVar(&examplesFlag, "examples", false, "Include complete User CRUD example (requires a database)")
+	newCmd.Flags().StringVar(&issueProviderFlag, "issue-provider", "linear", "Issue provider: linear,github,gitlab,repo,other")
+	newCmd.Flags().StringVar(&issuePrefixFlag, "issue-prefix", "", "Issue identifier prefix")
 	rootCmd.AddCommand(newCmd)
 }
 

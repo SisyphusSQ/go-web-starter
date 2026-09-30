@@ -1,18 +1,20 @@
 package controller
 
 import (
-	"go.uber.org/fx"
-
-	"{{ .ModuleName }}/internal/controller/comm_controller"
-	"{{ .ModuleName }}/internal/controller/example_controller"
+ "go.uber.org/fx"
+ "{{ .ModuleName }}/config"
+{{ if .Examples }}
+ "{{ .ModuleName }}/internal/controller/example_controller"
+{{ end }}
 )
 
-var Module = fx.Invoke(
-	comm_controller.InitIndexController,
-{{- if .MySQL }}
-	example_controller.InitUserController,
-{{- end }}
-{{- if .MongoDB }}
-	example_controller.InitUserMongoController,
-{{- end }}
-)
+func Module(cfg config.Config) fx.Option {
+ var options []fx.Option
+{{ if and .Examples .MySQL }}
+ if cfg.Database.Enabled {options=append(options,fx.Invoke(example_controller.InitUserController))}
+{{ end }}
+{{ if and .Examples .MongoDB }}
+ if cfg.MongoDB.Enabled {options=append(options,fx.Invoke(example_controller.InitUserMongoController))}
+{{ end }}
+ return fx.Options(options...)
+}

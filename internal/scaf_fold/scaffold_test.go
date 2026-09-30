@@ -171,8 +171,18 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 		module    string
 		binary    string
 		project   string
+		features  string
+		examples  bool
 		leakCheck func(*testing.T, string)
 	}{
+		{name: "standalone", module: "example.com/standalone", binary: "standalone", project: "standalone"},
+		{name: "redis-only", module: "example.com/redis-only", binary: "redis-only", project: "redis-only", features: "redis"},
+		{name: "jwt-redis", module: "example.com/jwt-redis", binary: "jwt-redis", project: "jwt-redis", features: "redis,jwt"},
+		{name: "optional-sdk", module: "example.com/sdk", binary: "sdk", project: "sdk", features: "cron,lark,prometheus-query"},
+		{name: "mysql-example", module: "example.com/mysql-example", binary: "mysql-example", project: "mysql-example", mysql: true, examples: true},
+		{name: "mongo-example", module: "example.com/mongo-example", binary: "mongo-example", project: "mongo-example", mongodb: true, examples: true},
+		{name: "full-example", module: "example.com/full-example", binary: "full-example", project: "full-example", mysql: true, mongodb: true, examples: true, features: "redis,cron,lark,prometheus-query,jwt"},
+
 		{
 			name:    "mysql-only",
 			mysql:   true,
@@ -250,8 +260,12 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 				ProjectName: tt.project,
 				MySQL:       tt.mysql,
 				MongoDB:     tt.mongodb,
+				Examples:    tt.examples,
 			}
 
+			if err := data.SetFeatures(tt.features); err != nil {
+				t.Fatal(err)
+			}
 			if err := Generate(outputDir, data); err != nil {
 				t.Fatalf("Generate() error = %v", err)
 			}
@@ -264,18 +278,34 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 
 			if tt.mysql {
 				assertFileExists(t, filepath.Join(outputDir, "internal", "lib", "gorm", "gorm.go"))
-				assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_handler.go"))
+				if tt.examples && tt.mysql {
+					assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_handler.go"))
+				} else {
+					assertFileNotExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_handler.go"))
+				}
 			} else {
 				assertFileNotExists(t, filepath.Join(outputDir, "internal", "lib", "gorm", "gorm.go"))
-				assertFileNotExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_handler.go"))
+				if tt.examples && tt.mysql {
+					assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_handler.go"))
+				} else {
+					assertFileNotExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_handler.go"))
+				}
 			}
 
 			if tt.mongodb {
 				assertFileExists(t, filepath.Join(outputDir, "internal", "lib", "mongodb", "mongodb.go"))
-				assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_mongo_handler.go"))
+				if tt.examples && tt.mongodb {
+					assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_mongo_handler.go"))
+				} else {
+					assertFileNotExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_mongo_handler.go"))
+				}
 			} else {
 				assertFileNotExists(t, filepath.Join(outputDir, "internal", "lib", "mongodb", "mongodb.go"))
-				assertFileNotExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_mongo_handler.go"))
+				if tt.examples && tt.mongodb {
+					assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_mongo_handler.go"))
+				} else {
+					assertFileNotExists(t, filepath.Join(outputDir, "internal", "controller", "example_controller", "user_mongo_handler.go"))
+				}
 			}
 
 			if runBuildChecks {
@@ -295,15 +325,20 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 				if stdout, stderr, err := runGoCommand(outputDir, "test", "-race", "./..."); err != nil {
 					t.Fatalf("go test -race failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 				}
+				if stdout, stderr, err := runGoCommand(outputDir, "test", "-tags", "integration", "./app/cmd", "-run", "^$"); err != nil {
+					t.Fatalf("compile integration: %v\n%s\n%s", err, stdout, stderr)
+				}
+				if stdout, stderr, err := runGoCommand(outputDir, "vet", "./..."); err != nil {
+					t.Fatalf("vet: %v\n%s\n%s", err, stdout, stderr)
+				}
 				if stdout, stderr, err := runGoCommand(outputDir, "build", "./..."); err != nil {
 					t.Fatalf("go build failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
 				}
-				if stdout, stderr, err := runGoCommand(outputDir, "vet", "./..."); err != nil {
-					t.Fatalf("go vet failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
-				}
 			}
 
-			tt.leakCheck(t, outputDir)
+			if tt.leakCheck != nil {
+				tt.leakCheck(t, outputDir)
+			}
 		})
 	}
 }

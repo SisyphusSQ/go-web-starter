@@ -1,19 +1,25 @@
 package service
 
 import (
-	"go.uber.org/fx"
-
-	"{{ .ModuleName }}/internal/service/common_srv"
-	"{{ .ModuleName }}/internal/service/example_srv"
+ "go.uber.org/fx"
+ "{{ .ModuleName }}/config"
+{{ if or .Lark .Prometheus }}
+ "{{ .ModuleName }}/internal/service/common_srv"
+{{ end }}
+{{ if .Examples }}
+ "{{ .ModuleName }}/internal/service/example_srv"
+{{ end }}
 )
-
-var Module = fx.Provide(
-	common_srv.NewLarkService,
-	common_srv.NewPrometheusService,
-{{- if .MySQL }}
-	example_srv.NewUserService,
-{{- end }}
-{{- if .MongoDB }}
-	example_srv.NewUserMongoService,
-{{- end }}
-)
+func Module(cfg config.Config)fx.Option{
+ options:=[]fx.Option{fx.Provide(
+{{ if and .Examples .MySQL }}example_srv.NewUserService,{{ end }}
+{{ if and .Examples .MongoDB }}example_srv.NewUserMongoService,{{ end }}
+ )}
+{{ if .Lark }}
+ if cfg.Lark.Enabled {options=append(options,fx.Provide(common_srv.NewLarkService),fx.Invoke(func(common_srv.LarkService){}))}
+{{ end }}
+{{ if .Prometheus }}
+ if cfg.Prometheus.Enabled {options=append(options,fx.Provide(common_srv.NewPrometheusService),fx.Invoke(func(common_srv.PrometheusService){}))}
+{{ end }}
+ return fx.Options(options...)
+}

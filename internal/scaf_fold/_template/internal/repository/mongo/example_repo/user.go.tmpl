@@ -23,19 +23,19 @@ type UserRepository interface {
 }
 
 type mongoUserRepo struct {
-	collection *mongo.Collection
+	client *mongodb.Client
 }
 
 func NewUserRepository(client *mongodb.Client) (UserRepository, error) {
 	if client == nil {
 		return nil, errors.New("mongodb client is nil")
 	}
-	return &mongoUserRepo{collection: client.Collection(do.User{}.Collection())}, nil
+	return &mongoUserRepo{client:client}, nil
 }
 
 func (m *mongoUserRepo) GetByID(ctx context.Context, id bson.ObjectID) (*do.User, error) {
 	var user do.User
-	err := m.collection.FindOne(ctx, bson.M{
+	err := m.client.Collection(do.User{}.Collection()).FindOne(ctx, bson.M{
 		"_id":       id,
 		"isDeleted": bson.M{"$ne": true},
 	}).Decode(&user)
@@ -46,11 +46,11 @@ func (m *mongoUserRepo) GetByID(ctx context.Context, id bson.ObjectID) (*do.User
 }
 
 func (m *mongoUserRepo) GetByCondAndPage(ctx context.Context, cond bson.M, skip, limit int64) ([]*do.User, int64, error) {
-	count, err := m.collection.CountDocuments(ctx, cond)
+	count, err := m.client.Collection(do.User{}.Collection()).CountDocuments(ctx, cond)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := m.collection.Find(
+	cursor, err := m.client.Collection(do.User{}.Collection()).Find(
 		ctx,
 		cond,
 		options.Find().SetSort(bson.D{bson.E{Key: "_id", Value: -1}}).SetSkip(skip).SetLimit(limit),
@@ -72,13 +72,13 @@ func (m *mongoUserRepo) Create(ctx context.Context, user *do.User) error {
 	user.ID = bson.NewObjectID()
 	user.CreatedAt = now
 	user.UpdatedAt = now
-	_, err := m.collection.InsertOne(ctx, user)
+	_, err := m.client.Collection(do.User{}.Collection()).InsertOne(ctx, user)
 	return err
 }
 
 func (m *mongoUserRepo) UpdateByID(ctx context.Context, id bson.ObjectID, updates bson.M) error {
 	updates["updatedAt"] = time.Now()
-	result, err := m.collection.UpdateByID(ctx, id, bson.M{"$set": updates})
+	result, err := m.client.Collection(do.User{}.Collection()).UpdateOne(ctx, bson.M{"_id":id,"isDeleted":bson.M{"$ne":true}}, bson.M{"$set": updates})
 	if err != nil {
 		return err
 	}
