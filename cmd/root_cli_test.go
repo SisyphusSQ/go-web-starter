@@ -40,11 +40,11 @@ func TestRootExecuteNewUsesDefaultDBFlag(t *testing.T) {
 		t.Fatalf("read generated go.mod: %v", err)
 	}
 	modText := string(goMod)
-	if !strings.Contains(modText, "gorm.io/gorm") {
-		t.Fatalf("default db should include mysql dependency, go.mod:\n%s", modText)
+	if strings.Contains(modText, "gorm.io/gorm") {
+		t.Fatalf("default db should not include mysql dependency, go.mod:\n%s", modText)
 	}
-	if !strings.Contains(modText, "go.mongodb.org/mongo-driver/v2") {
-		t.Fatalf("default db should include mongodb dependency, go.mod:\n%s", modText)
+	if strings.Contains(modText, "go.mongodb.org/mongo-driver/v2") {
+		t.Fatalf("default db should not include mongodb dependency, go.mod:\n%s", modText)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestRootExecuteNewHelpContainsDBFlag(t *testing.T) {
 	if err := executeRootForTest(&output, "new", "--help"); err != nil {
 		t.Fatalf("execute new --help failed: %v", err)
 	}
-	if !strings.Contains(output.String(), "Database engines: mysql, mongodb, or mysql,mongodb") {
+	if !strings.Contains(output.String(), "Database engines: none, mysql, mongodb, or mysql,mongodb") {
 		t.Fatalf("help output missing db flag description:\n%s", output.String())
 	}
 }
@@ -88,10 +88,18 @@ func executeRootForTest(output *bytes.Buffer, args ...string) error {
 }
 
 func resetCLIFlagStateForTest() {
+	withFlag = ""
+	examplesFlag = false
+	issueProviderFlag = "linear"
+	issuePrefixFlag = ""
+	initWithFlag = ""
+	initExamplesFlag = false
+	initIssueProviderFlag = "linear"
+	initIssuePrefixFlag = ""
 	moduleNameFlag = ""
 	binaryNameFlag = ""
-	dbFlag = "mysql,mongodb"
+	dbFlag = "none"
 	initModuleNameFlag = ""
 	initBinaryNameFlag = ""
-	initDBFlag = "mysql,mongodb"
+	initDBFlag = "none"
 }

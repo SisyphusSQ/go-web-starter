@@ -30,3 +30,10 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
+
+# Local execution records
+.agents/runs/*
+!.agents/runs/TEMPLATE.md
+.agents/state/*
+!.agents/state/TEMPLATE.md
+bin/

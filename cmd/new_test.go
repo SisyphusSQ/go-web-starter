@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SisyphusSQ/go-web-starter/internal/scaf_fold"
+	"github.com/SisyphusSQ/go-web-starter/v2/internal/scaf_fold"
 )
 
 func TestInferProjectNameFromCurrentDirectory(t *testing.T) {

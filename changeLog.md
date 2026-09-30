@@ -1,5 +1,33 @@
 # changeLog
 
+### Unreleased
+
+### v2.0.0(20260930)
+
+#### feature:
+
+1. 新增 docs/sqls/schema、unreleased、releases 的 SQL 文件规范，明确版本归档及执行证据要求。
+
+2. 新增 Windows、macOS、Linux 的 amd64/arm64 六平台构建及独立产物目录；保留本机构建入口。
+3. 文档按 docs/design/architecture 与 docs/design/details/<topic> 分层，固化 DO/DTO/VO、Go 代码规范和新增模块步骤；默认工程保留模型目录说明。
+
+4. 默认生成无数据库、无业务示例的工程；新增 --with、--examples 和 Harness Issue Provider 配置。
+5. 新增 reference 比较和同步命令、生成来源与文件摘要清单，拒绝覆盖参考工程的本地修改。
+6. 预置 Harness v0.7.0、docs、隔离联调 Compose 和产物组合验证流程。
+#### optimization:
+
+
+1. 保持 Go 1.27.1、Echo v5 和 Uber Fx，更新保留依赖及间接依赖到核对的稳定版本。
+2. 组件按配置装配；新增请求关联日志、统一错误、健康与就绪探针及同库事务入口。
+3. JWT 与 Redis 显式关联，metrics 受鉴权保护；完整 CRUD 仅随 --examples 生成。
+
+#### note:
+
+- 模块路径采用 /v2；version 与 --version 使用同一版本来源，正式产物固定注入 v2.0.0。
+
+1. 本基底用于新项目初始化；生成默认值、组件配置和示例开关以当前文档为准。
+2. 不附带业务或 examples SQL；docs/sqls 预置完整结构、unreleased 和版本归档规范。
+
 ### v1.1.0(20260911)
 #### optimization:
 1. 工具与生成项目统一升级到 Go 1.27.1；生成器固定稳定版本并在写盘前格式化 Go 源码，避免因本机 toolchain 不同产生漂移。

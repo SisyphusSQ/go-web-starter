@@ -1,90 +1,35 @@
 # go-web-starter
 
-`go-web-starter` 是一个 Go Web 脚手架工具，用于快速生成可运行的 Web
-项目基础结构。工具本身基于 `cobra` 构建，模板通过 `embed.FS` 内置。
+Go 1.27.1 + Echo v5 + Uber Fx 脚手架。当前发布：v2.0.0，Go module 路径使用 /v2。生成工程自带严格配置校验、请求关联日志、统一错误、鉴权、存活/就绪探针、资源生命周期、文档和 Harness。
 
-## 功能概览
-
-- 提供 `new` 命令在目标目录生成新项目
-- 提供 `init` 命令在当前目录初始化项目
-- 支持 `--db` 按需选择数据库模板：
-  - `mysql`
-  - `mongodb`
-  - `mysql,mongodb`（默认）
-- 支持自定义模块名（`--module`）与二进制名（`--binary`）
-- 生成项目默认包含严格配置校验、资源生命周期管理、race 测试、CI 与非 root 容器镜像
-- 使用 Echo v5、MongoDB Driver v2 等稳定 module path，不生成 `+incompatible` 依赖
-
-## 环境要求
-
-- Go `1.27.1` 或更高版本
-
-## 构建与运行
-
-```bash
-go mod tidy
+```sh
 make build
-```
-
-构建产物默认在 `bin/go-web-starter`。
-
-## 使用方式
-
-### 1) 生成到新目录
-
-```bash
-go-web-starter new <output-dir> [flags]
-```
-
-### 2) 在当前目录初始化
-
-```bash
-go-web-starter init [flags]
-```
-
-`init` 仅允许当前目录为空或仅包含 `.git` 目录。
-
-### 常用参数
-
-- `-m, --module`：Go module 路径（默认 `example.com/<directory-name>`）
-- `-b, --binary`：二进制名（默认从目录名推导）
-- `--db`：数据库选择（`mysql` / `mongodb` / `mysql,mongodb`）
-
-## 示例
-
-```bash
-# 生成 MySQL + MongoDB 双数据库项目（默认）
-go-web-starter new demo-web
-
-# 仅生成 MySQL 相关代码
-go-web-starter new demo-web --db mysql
-
-# 仅生成 MongoDB 相关代码
-go-web-starter new demo-web --db mongodb
-
-# 在当前目录初始化并指定模块名
-go-web-starter init --module github.com/acme/demo-web --db mysql
-```
-
-## 生成后建议步骤
-
-```bash
-cd <output-dir>
+./bin/go-web-starter new demo
+cd demo
 go mod tidy
-# 按需修改 config/config.yml
-go run ./app/main.go http
+make run
 ```
 
-## 开发与验证
+默认无数据库、无 Redis、无示例业务；监听本机且仅 debug 允许无鉴权。已选入的组件默认关闭，运行时在配置里开启。
 
-```bash
-# 默认 race 测试
-go test -race ./...
-
-# integration 测试（包含联网构建校验）
-go test -tags integration ./internal/scaf_fold -run TestGenerateE2EDBCombosIntegration -count=1
-
-# 构建与静态检查
-go build ./...
-go vet ./...
+```sh
+go-web-starter new my-service --module example.com/my-service --db mysql --with redis,cron
+go-web-starter new account-example --db mysql --with redis,jwt --examples
+go-web-starter init --module example.com/my-service --db none
 ```
+
+| 选项 | 说明 |
+|---|---|
+| --db | none（默认）、mysql、mongodb、mysql,mongodb |
+| --with | redis、cron、lark、prometheus-query、jwt；jwt 要求 redis |
+| --examples | 显式生成 User CRUD，至少选择一种数据库 |
+| --module / --binary | 自定义模块路径和二进制名 |
+| --issue-provider / --issue-prefix | Harness 项目元数据；仅 repo provider 生成 docs/issues |
+
+new/init 只接受不存在、空目录或仅有 .git 的目录，拒绝符号链接和覆盖。生成前完成所有模板渲染及 Go 格式检查，避免模板错误留下半成品。磁盘写入失败仍可能部分完成，应检查输出后恢复。
+
+[维护文档](docs/README.md) · [组件与测试](docs/test/README.md)
+
+make test 验证生成器；make integration 验证实际生成工程；make build/release 只构建。go-starter 参考仓通过固定配置和来源清单同步，见维护文档。
+
+安装此版本：`go install github.com/SisyphusSQ/go-web-starter/v2@v2.0.0`。也可下载对应平台的 Release 压缩包；Windows 使用 .exe。

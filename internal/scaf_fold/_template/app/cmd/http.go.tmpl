@@ -12,7 +12,8 @@ import (
 
 	"{{ .ModuleName }}/config"
 	"{{ .ModuleName }}/internal/controller"
-	"{{ .ModuleName }}/internal/cron"
+	{{ if .Cron }}"{{ .ModuleName }}/internal/cron"{{ end }}
+"{{ .ModuleName }}/internal/health"
 	"{{ .ModuleName }}/internal/http"
 	libs "{{ .ModuleName }}/internal/lib"
 	"{{ .ModuleName }}/internal/lib/log"
@@ -48,28 +49,33 @@ func initHTTP(cmd *cobra.Command, _ []string) error {
 
 	runCtx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err = app.Start(runCtx); err != nil {
+	startCtx, cancelStart := context.WithTimeout(runCtx,c.ContextTimeout)
+ defer cancelStart()
+ if err = app.Start(startCtx); err != nil {
 		return fmt.Errorf("start application: %w", err)
 	}
-	<-runCtx.Done()
+	var runtimeErr error
+ select {case <-runCtx.Done():case signal:=<-app.Wait():if signal.ExitCode!=0{runtimeErr=fmt.Errorf("application stopped unexpectedly")}}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), c.Server.ShutdownTimeout)
 	defer cancel()
 	if err = app.Stop(shutdownCtx); err != nil {
 		return fmt.Errorf("stop application: %w", err)
 	}
-	return nil
+	return runtimeErr
 }
 
 func inject(c config.Config) fx.Option {
 	return fx.Options(
 		fx.Supply(c),
 		fx.Provide(utils.NewTimeoutContext),
-		libs.GlobalModule,
+		fx.Provide(health.New),
+ libs.Module(c),
 		repository.Module,
-		service.Module,
-		cron.Module,
-		controller.Module,
+		service.Module(c),
+		{{ if .Cron }}cron.Module,{{ end }}
+		controller.Module(c),
+fx.Invoke(func(*http.Server){}),
 		http.Module,
 	)
 }

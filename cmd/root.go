@@ -7,15 +7,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/SisyphusSQ/go-web-starter/vars"
+	"github.com/SisyphusSQ/go-web-starter/v2/vars"
 )
 
 var initOnce sync.Once
 
 var rootCmd = &cobra.Command{
-	Use:   vars.AppName,
-	Short: "Generate Go web starter projects",
-	Long:  "go-web-starter generates a ready-to-use Go web project template.",
+	Use:     vars.AppName,
+	Version: vars.AppVersion,
+	Short:   "Generate Go web starter projects",
+	Long:    "go-web-starter generates a ready-to-use Go web project template.",
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()
 	},
@@ -25,6 +26,7 @@ func initAll() {
 	initVersion()
 	initInit()
 	initNew()
+	initReference()
 }
 
 func ensureInitialized() {

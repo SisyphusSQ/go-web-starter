@@ -1,24 +1,15 @@
 package repository
 
 import (
-	"go.uber.org/fx"
-{{- if .MongoDB }}
-
-	mongo_example_repo "{{ .ModuleName }}/internal/repository/mongo/example_repo"
-{{- end }}
-{{- if .MySQL }}
-	mysql_example_repo "{{ .ModuleName }}/internal/repository/mysql/example_repo"
-	"{{ .ModuleName }}/internal/repository/mysql/my_common"
-{{- end }}
+ "go.uber.org/fx"
+{{ if and .Examples .MongoDB }}
+ mongo_example_repo "{{ .ModuleName }}/internal/repository/mongo/example_repo"
+{{ end }}
+{{ if and .Examples .MySQL }}
+ mysql_example_repo "{{ .ModuleName }}/internal/repository/mysql/example_repo"
+{{ end }}
 )
-
-var Module = fx.Provide(
-{{- if .MySQL }}
-	my_common.NewConfigKVRepository,
-	my_common.NewLarkMsgLogRepository,
-	mysql_example_repo.NewUserRepository,
-{{- end }}
-{{- if .MongoDB }}
-	mongo_example_repo.NewUserRepository,
-{{- end }}
+var Module=fx.Provide(
+{{ if and .Examples .MySQL }}mysql_example_repo.NewUserRepository,{{ end }}
+{{ if and .Examples .MongoDB }}mongo_example_repo.NewUserRepository,{{ end }}
 )

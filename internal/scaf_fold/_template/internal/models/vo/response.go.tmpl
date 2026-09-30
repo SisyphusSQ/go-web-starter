@@ -6,9 +6,11 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"{{ .ModuleName }}/utils"
+"{{ .ModuleName }}/internal/requestinfo"
 )
 
 type Response struct {
+ RequestID string `json:"request_id,omitempty"`
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    any    `json:"data"`
@@ -23,14 +25,13 @@ func ErrorResp(status int, message string) Response {
 }
 
 func CommSuccResp(c *echo.Context, data any) error {
-	return c.JSON(http.StatusOK, SuccessResp(data))
+	response:=SuccessResp(data)
+ response.RequestID=requestinfo.ID(c.Request().Context())
+ return c.JSON(http.StatusOK,response)
 }
 
 func CommErrResp(c *echo.Context, err error) error {
 	status := utils.GetStatusCode(err)
-	message := err.Error()
-	if status >= http.StatusInternalServerError {
-		message = http.StatusText(http.StatusInternalServerError)
-	}
-	return c.JSON(status, Response{Code: status, Message: message})
+	message := http.StatusText(status)
+	return c.JSON(status, Response{Code: status, Message: message,RequestID:requestinfo.ID(c.Request().Context())})
 }

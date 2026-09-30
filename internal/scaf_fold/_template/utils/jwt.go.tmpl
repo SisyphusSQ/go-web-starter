@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"time"
+"uuid"
 
 	"github.com/golang-jwt/jwt/v5"
 
@@ -27,7 +28,8 @@ func GenerateToken(userID int64, email string, cfg config.JWTConfig) (string, er
 		UserID: userID,
 		Email:  email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expireAt),
+			ID: uuid.New().String(),
+ExpiresAt: jwt.NewNumericDate(expireAt),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    cfg.Issuer,

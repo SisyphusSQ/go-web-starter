@@ -1,137 +1,25 @@
 package cron
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"time"
-
-	"github.com/bsm/redislock"
-	"github.com/robfig/cron/v3"
-	"go.uber.org/fx"
-
-	"{{ .ModuleName }}/config"
-	"{{ .ModuleName }}/internal/lib/log"
-	"{{ .ModuleName }}/internal/lib/redis"
-	"{{ .ModuleName }}/utils"
+ "context"
+ "fmt"
+ "github.com/robfig/cron/v3"
+ "go.uber.org/fx"
+ "{{ .ModuleName }}/config"
+ "{{ .ModuleName }}/internal/lib/log"
 )
 
-const cacheMetricsCounter = "{{ .BinaryName }}:cron:cache_metrics:counter"
-
-type service struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	ip      string
-	cron    *cron.Cron
-	cache   *redis.Client
-	locker  *redislock.Client
-	lockTTL time.Duration
-}
-
-func NewCron(lifecycle fx.Lifecycle, cfg config.Config, cache *redis.Client) error {
-	if !cfg.Cron.On {
-		return nil
-	}
-	if cache == nil {
-		return errors.New("redis client is nil")
-	}
-
-	timezone, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return fmt.Errorf("load cron timezone: %w", err)
-	}
-	ip, err := utils.GetIP()
-	if err != nil {
-		return fmt.Errorf("resolve cron worker IP: %w", err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	s := &service{
-		ctx:     ctx,
-		cancel:  cancel,
-		ip:      ip,
-		cron:    cron.New(
-			cron.WithSeconds(),
-			cron.WithLocation(timezone),
-			cron.WithLogger(cron.VerbosePrintfLogger(log.Logger)),
-			cron.WithChain(cron.Recover(cron.VerbosePrintfLogger(log.Logger))),
-		),
-		cache:   cache,
-		locker:  redislock.New(cache),
-		lockTTL: cfg.Cron.LockTTL,
-	}
-	if _, err = s.cron.AddFunc("@every 30s", s.sample); err != nil {
-		cancel()
-		return fmt.Errorf("register sample cron: %w", err)
-	}
-	if _, err = s.cron.AddFunc("@every 1m", s.collectCacheMetrics); err != nil {
-		cancel()
-		return fmt.Errorf("register cache metrics cron: %w", err)
-	}
-
-	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			log.Logger.Info("starting cron scheduler")
-			s.cron.Start()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			s.cancel()
-			stopped := s.cron.Stop()
-			select {
-			case <-stopped.Done():
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		},
-	})
-	return nil
-}
-
-func (s *service) sample() {
-	lock, ok := s.obtainLock("sample")
-	if !ok {
-		return
-	}
-	defer s.releaseLock(lock)
-	log.Logger.Infof("sample cron task executed on %s", s.ip)
-}
-
-func (s *service) collectCacheMetrics() {
-	lock, ok := s.obtainLock("cache_metrics")
-	if !ok {
-		return
-	}
-	defer s.releaseLock(lock)
-
-	count, err := s.cache.Incr(s.ctx, cacheMetricsCounter).Result()
-	if err != nil {
-		log.Logger.Errorf("collect cache metrics: %v", err)
-		return
-	}
-	if err = s.cache.Expire(s.ctx, cacheMetricsCounter, 24*time.Hour).Err(); err != nil {
-		log.Logger.Errorf("set cache metrics ttl: %v", err)
-		return
-	}
-	log.Logger.Infof("cache metrics collected on %s count=%d", s.ip, count)
-}
-
-func (s *service) obtainLock(taskName string) (*redislock.Lock, bool) {
-	key := "{{ .BinaryName }}:cron:lock:" + taskName
-	lock, err := s.locker.Obtain(s.ctx, key, s.lockTTL, nil)
-	if err != nil {
-		if errors.Is(err, redislock.ErrNotObtained) {
-			log.Logger.Infof("cron lock not obtained task=%s worker=%s", taskName, s.ip)
-		} else {
-			log.Logger.Errorf("obtain cron lock task=%s worker=%s err=%v", taskName, s.ip, err)
-		}
-		return nil, false
-	}
-	return lock, true
-}
-
-func (s *service) releaseLock(lock *redislock.Lock) {
-	if err := lock.Release(context.Background()); err != nil && !errors.Is(err, redislock.ErrLockNotHeld) {
-		log.Logger.Warnf("release cron lock: %v", err)
-	}
+// Job 由业务通过 fx.ResultTags(`group:"cron_jobs"`) 注册；模板不自带业务任务。
+type Job struct { Name string; Schedule string; Run func(context.Context) }
+type Params struct { fx.In; Jobs []Job `group:"cron_jobs"` }
+func NewCron(lifecycle fx.Lifecycle,cfg config.Config,params Params)error{
+ if !cfg.Cron.On{return nil}
+ ctx,cancel:=context.WithCancel(context.Background())
+ scheduler:=cron.New(cron.WithChain(cron.SkipIfStillRunning(cron.PrintfLogger(log.Logger)),cron.Recover(cron.PrintfLogger(log.Logger))))
+ for _,job:=range params.Jobs{
+  if job.Name==""||job.Run==nil{cancel();return fmt.Errorf("cron job requires a name and callback")}
+  if _,err:=scheduler.AddFunc(job.Schedule,func(){job.Run(ctx)});err!=nil{cancel();return fmt.Errorf("register cron %s: %w",job.Name,err)}
+ }
+ lifecycle.Append(fx.Hook{OnStart:func(context.Context)error{scheduler.Start();return nil},OnStop:func(ctx context.Context)error{cancel();done:=scheduler.Stop();select{case <-done.Done():return nil;case <-ctx.Done():return ctx.Err()}}})
+ return nil
 }

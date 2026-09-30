@@ -3,7 +3,9 @@ debug: true
 contextTimeout: 10s
 
 server:
-    address: ":8080"
+    metrics: true
+    readinessTimeout: 2s
+    address: "127.0.0.1:8080"
     readHeaderTimeout: 5s
     readTimeout: 15s
     writeTimeout: 15s
@@ -15,6 +17,7 @@ server:
 
 {{- if .MySQL }}
 database:
+    enabled: false
     driver: "mysql"
     host: "127.0.0.1"
     port: 3306
@@ -29,7 +32,9 @@ database:
     name: "db_test"
 
 {{- end }}
+{{ if .Redis }}
 redis:
+    enabled: false
     name: "test"
     proto: "tcp"
     addr: "127.0.0.1:6379"
@@ -45,8 +50,11 @@ redis:
         waitTimeout: 2s
         wait: true
 
+{{ end }}
+
 {{- if .MongoDB }}
 mongodb:
+    enabled: false
     uri: "mongodb://127.0.0.1:27017"
     authSource: "admin"
     user: ""
@@ -57,17 +65,26 @@ mongodb:
     connectTimeout: 5s
 
 {{- end }}
+{{ if .Prometheus }}
 prometheus:
+    enabled: false
     url: "http://127.0.0.1:9090"
     token: ""
     timeout: 5s
 
+{{ end }}
+
+{{ if .Lark }}
 lark:
+    enabled: false
     appID: ""
     appSecret: ""
     timeout: 10s
 
+{{ end }}
+
 log:
+    output: "stdout"
     fileName: "logs/{{ .ProjectName }}.log"
     logLevel: 0
     maxSizeMB: 20
@@ -83,10 +100,12 @@ key:
         accessKey: ""
         secretKey: ""
     jwt:
+        namespace: "{{ .ProjectName }}"
         secret: ""
         expire: 2h
         issuer: "{{ .ProjectName }}"
+{{- if .Cron }}
 
 cron:
     on: false
-    lockTTL: 30s
+{{- end }}

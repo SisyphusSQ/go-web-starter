@@ -1,8 +1,8 @@
 package example_controller
 
 import (
-	"errors"
-	"net/http"
+	{{ if .JWT }}"errors"
+"golang.org/x/time/rate"{{ end }}
 	"strconv"
 
 	"github.com/labstack/echo/v5"
@@ -22,10 +22,14 @@ func InitUserController(e *echo.Echo, userService example_srv.UserService, cfg c
 		userService: userService,
 	}
 
+{{ if .JWT }}
 	if cfg.Key.Type == "jwt" {
-		e.POST("/login", controller.Login)
+		limiter:=rate.NewLimiter(5,10)
+ e.POST("/login",controller.Login,func(next echo.HandlerFunc)echo.HandlerFunc{return func(c *echo.Context)error{if !limiter.Allow(){return echo.ErrTooManyRequests};return next(c)}})
 		e.POST("/logout", controller.Logout)
 	}
+
+{{ end }}
 
 	g := e.Group("/mysql/users")
 	g.GET("/:id", controller.GetByID)
@@ -68,10 +72,7 @@ func (u *UserController) List(c *echo.Context) error {
 
 func (u *UserController) Create(c *echo.Context) error {
 	var req vo.CreateUserReq
-	if err := c.Bind(&req); err != nil {
-		return vo.CommErrResp(c, utils.ErrBadParamInput)
-	}
-	if err := req.Validate(); err != nil {
+	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
 
@@ -82,19 +83,17 @@ func (u *UserController) Create(c *echo.Context) error {
 	return vo.CommSuccResp(c, user)
 }
 
+{{ if .JWT }}
 func (u *UserController) Login(c *echo.Context) error {
 	var req vo.LoginReq
-	if err := c.Bind(&req); err != nil {
-		return vo.CommErrResp(c, utils.ErrBadParamInput)
-	}
-	if err := req.Validate(); err != nil {
+	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
 
 	resp, err := u.userService.Login(c.Request().Context(), req)
 	if err != nil {
 		if errors.Is(err, example_srv.ErrInvalidCredentials) {
-			return c.JSON(http.StatusUnauthorized, vo.ErrorResp(http.StatusUnauthorized, "认证失败"))
+			return utils.ErrUnauthorized
 		}
 		return vo.CommErrResp(c, err)
 	}
@@ -104,7 +103,7 @@ func (u *UserController) Login(c *echo.Context) error {
 func (u *UserController) Logout(c *echo.Context) error {
 	userID, ok := getUserID(c.Get("user_id"))
 	if !ok {
-		return c.JSON(http.StatusUnauthorized, vo.ErrorResp(http.StatusUnauthorized, "认证失败"))
+		return utils.ErrUnauthorized
 	}
 
 	resp, err := u.userService.Logout(c.Request().Context(), userID)
@@ -114,6 +113,7 @@ func (u *UserController) Logout(c *echo.Context) error {
 	return vo.CommSuccResp(c, resp)
 }
 
+{{ end }}
 func (u *UserController) Update(c *echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -121,10 +121,7 @@ func (u *UserController) Update(c *echo.Context) error {
 	}
 
 	var req vo.UpdateUserReq
-	if err = c.Bind(&req); err != nil {
-		return vo.CommErrResp(c, utils.ErrBadParamInput)
-	}
-	if err = req.Validate(); err != nil {
+	if err = vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
 

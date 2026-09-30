@@ -4,14 +4,6 @@ import (
 	"net/mail"
 	"strings"
 
-{{- if and .MySQL .MongoDB }}
-	mongoDo "{{ .ModuleName }}/internal/models/do/mongo/example_do"
-	mysqlDo "{{ .ModuleName }}/internal/models/do/mysql/example_do"
-{{- else if .MySQL }}
-	mysqlDo "{{ .ModuleName }}/internal/models/do/mysql/example_do"
-{{- else if .MongoDB }}
-	mongoDo "{{ .ModuleName }}/internal/models/do/mongo/example_do"
-{{- end }}
 
 	"{{ .ModuleName }}/utils"
 )
@@ -52,7 +44,7 @@ type LoginResp struct {
 }
 
 func (r CreateUserReq) Validate() error {
-	if strings.TrimSpace(r.Name) == "" || len(r.Password) < 8 || !validEmail(r.Email) {
+	if strings.TrimSpace(r.Name) == "" || len(r.Password) < 8 || len(r.Password)>72 || !validEmail(r.Email) {
 		return utils.ErrBadParamInput
 	}
 	return nil
@@ -83,14 +75,14 @@ func validEmail(value string) bool {
 {{- if .MySQL }}
 type UserListResp struct {
 	Total int64          `json:"total"`
-	List  []mysqlDo.User `json:"list"`
+	List  []UserView `json:"list"`
 }
 {{- end }}
 
 {{- if .MongoDB }}
 type UserMongoListResp struct {
 	Total int64           `json:"total"`
-	List  []*mongoDo.User `json:"list"`
+	List  []MongoUserView `json:"list"`
 }
 {{- end }}
 
@@ -103,3 +95,7 @@ type UserMongoIDResp struct {
 	ID string `json:"id"`
 }
 {{- end }}
+
+// UserView 不包含密码哈希或持久化元数据。
+type UserView struct { ID int64 `json:"id"`; Name string `json:"name"`; Email string `json:"email"` }
+type MongoUserView struct { ID string `json:"id"`; Name string `json:"name"`; Email string `json:"email"` }
