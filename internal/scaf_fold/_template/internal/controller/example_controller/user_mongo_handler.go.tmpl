@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"{{ .ModuleName }}/internal/models/vo"
+	"{{ .ModuleName }}/internal/models/vo/example_vo"
 	"{{ .ModuleName }}/internal/service/example_srv"
 	"{{ .ModuleName }}/utils"
 )
@@ -59,7 +60,7 @@ func (u *UserMongoController) List(c *echo.Context) error {
 }
 
 func (u *UserMongoController) Create(c *echo.Context) error {
-	var req vo.CreateMongoUserReq
+	var req example_vo.CreateMongoUserReq
 	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
@@ -74,7 +75,7 @@ func (u *UserMongoController) Create(c *echo.Context) error {
 func (u *UserMongoController) Update(c *echo.Context) error {
 	id := c.Param("id")
 
-	var req vo.UpdateUserReq
+	var req example_vo.UpdateUserReq
 	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}

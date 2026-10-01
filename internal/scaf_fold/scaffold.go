@@ -228,7 +228,7 @@ func defaultGoVersion() string {
 func shouldSkipTemplate(path string, data TemplateData) bool {
 	path = filepath.ToSlash(path)
 	rel := strings.TrimPrefix(path, templateRoot+"/")
-	if !data.Examples && (strings.Contains(rel, "/example_") || rel == "internal/models/vo/user.go.tmpl") {
+	if !data.Examples && strings.Contains(rel, "/example_") {
 		return true
 	}
 	if data.IssueProvider != "repo" && strings.HasPrefix(rel, "docs/issues") {
@@ -243,7 +243,7 @@ func shouldSkipTemplate(path string, data TemplateData) bool {
 	}{
 		{data.Redis, []string{"internal/lib/redis"}},
 		{data.Cron, []string{"internal/cron"}},
-		{data.Lark, []string{"internal/service/common_srv/lark_service.go.tmpl", "internal/models/dto/lark.go.tmpl", "internal/lib/log/lark_logger.go.tmpl"}},
+		{data.Lark, []string{"internal/service/common_srv/lark_service.go.tmpl", "internal/models/dto/lark_dto", "internal/lib/log/lark_logger.go.tmpl"}},
 		{data.Prometheus, []string{"internal/service/common_srv/prometheus_service.go.tmpl"}},
 		{data.JWT, []string{"utils/jwt.go.tmpl", "utils/jwt_test.go.tmpl"}},
 	}

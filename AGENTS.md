@@ -17,6 +17,7 @@
 
 - 修改前阅读 docs/design/architecture/README.md 和 docs/design/details/development/README.md。
 - 生成工程模型与代码规则的权威文件位于 internal/scaf_fold/_template/docs/design/architecture/models.md.tmpl 和 internal/scaf_fold/_template/docs/design/details/development/code-style.md.tmpl。
+- 业务子包权威规则位于 internal/scaf_fold/_template/docs/design/architecture/packages.md.tmpl；模板中的业务 controller/service/repository、DO/DTO/VO 必须按域分包，MySQL DO 一个表一个文件，层根包仅保留装配及明确公共能力。
 - 不生成 examples 也必须保留 models/do、dto、vo 的说明与规范入口；不要用恢复演示业务代替架构说明。
 - docs/README.md 只做导航；architecture 放长期边界，details/<topic>/ 放实现细节，test 放验收；调整目录时同步所有链接。
 - make build-all / release-all 覆盖 Windows/macOS/Linux 的 amd64 和 arm64；详见 docs/design/details/build/README.md。

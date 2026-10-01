@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/SisyphusSQ/go-web-starter/v2/internal/scaf_fold"
+	"github.com/SisyphusSQ/go-web-starter/v2/vars"
 )
 
 func initReference() {
@@ -26,7 +27,7 @@ func initReference() {
 		}
 		defer os.RemoveAll(temp)
 		output := filepath.Join(temp, "go-starter")
-		data := scaf_fold.TemplateData{ModuleName: "github.com/SisyphusSQ/go-starter/v2", AppVersion: "v2.0.0", BinaryName: "go-starter", ProjectName: "go-starter", MySQL: true, MongoDB: true, Redis: true, Cron: true, Lark: true, Prometheus: true, JWT: true, IssueProvider: "linear"}
+		data := scaf_fold.TemplateData{ModuleName: "github.com/SisyphusSQ/go-starter/v2", AppVersion: vars.ReleaseVersion, BinaryName: "go-starter", ProjectName: "go-starter", MySQL: true, MongoDB: true, Redis: true, Cron: true, Lark: true, Prometheus: true, JWT: true, IssueProvider: "linear"}
 		if err := scaf_fold.Generate(output, data); err != nil {
 			return err
 		}

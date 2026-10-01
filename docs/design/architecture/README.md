@@ -8,6 +8,7 @@
 运行工程的规范源文件：
 
 - [分层与 Fx](../../../internal/scaf_fold/_template/docs/design/architecture/README.md.tmpl)
+- [业务子包与 MySQL DO 文件](../../../internal/scaf_fold/_template/docs/design/architecture/packages.md.tmpl)
 - [DO / DTO / VO](../../../internal/scaf_fold/_template/docs/design/architecture/models.md.tmpl)
 - [Go 代码规范](../../../internal/scaf_fold/_template/docs/design/details/development/code-style.md.tmpl)
 

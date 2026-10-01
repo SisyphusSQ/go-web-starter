@@ -1,7 +1,7 @@
 package vars
 
 // ReleaseVersion 标识本次生成器发布及其模板来源。
-const ReleaseVersion = "v2.0.0"
+const ReleaseVersion = "v2.0.1"
 
 var (
 	AppName    = "go-web-starter"

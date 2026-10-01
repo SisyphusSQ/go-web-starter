@@ -276,6 +276,22 @@ func testGenerateE2EDBCombos(t *testing.T, runBuildChecks bool) {
 			assertFileExists(t, filepath.Join(outputDir, "internal", "repository", "module.go"))
 			assertFileExists(t, filepath.Join(outputDir, "internal", "controller", "module.go"))
 
+			// 业务模型进入子包；选项关闭时不得残留业务文件或空子包。
+			assertFileNotExists(t, filepath.Join(outputDir, "internal", "models", "vo", "user.go"))
+			assertFileNotExists(t, filepath.Join(outputDir, "internal", "models", "dto", "lark.go"))
+			exampleVO := filepath.Join(outputDir, "internal", "models", "vo", "example_vo")
+			if tt.examples {
+				assertFileExists(t, filepath.Join(exampleVO, "user.go"))
+			} else {
+				assertFileNotExists(t, exampleVO)
+			}
+			larkDTO := filepath.Join(outputDir, "internal", "models", "dto", "lark_dto")
+			if data.Lark {
+				assertFileExists(t, filepath.Join(larkDTO, "lark.go"))
+			} else {
+				assertFileNotExists(t, larkDTO)
+			}
+
 			if tt.mysql {
 				assertFileExists(t, filepath.Join(outputDir, "internal", "lib", "gorm", "gorm.go"))
 				if tt.examples && tt.mysql {
