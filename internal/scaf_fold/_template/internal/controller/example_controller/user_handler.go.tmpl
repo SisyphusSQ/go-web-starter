@@ -9,6 +9,7 @@ import (
 
 	"{{ .ModuleName }}/config"
 	"{{ .ModuleName }}/internal/models/vo"
+	"{{ .ModuleName }}/internal/models/vo/example_vo"
 	"{{ .ModuleName }}/internal/service/example_srv"
 	"{{ .ModuleName }}/utils"
 )
@@ -71,7 +72,7 @@ func (u *UserController) List(c *echo.Context) error {
 }
 
 func (u *UserController) Create(c *echo.Context) error {
-	var req vo.CreateUserReq
+	var req example_vo.CreateUserReq
 	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
@@ -85,7 +86,7 @@ func (u *UserController) Create(c *echo.Context) error {
 
 {{ if .JWT }}
 func (u *UserController) Login(c *echo.Context) error {
-	var req vo.LoginReq
+	var req example_vo.LoginReq
 	if err := vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}
@@ -120,7 +121,7 @@ func (u *UserController) Update(c *echo.Context) error {
 		return vo.CommErrResp(c, utils.ErrBadParamInput)
 	}
 
-	var req vo.UpdateUserReq
+	var req example_vo.UpdateUserReq
 	if err = vo.BindAndValidate(c, &req); err != nil {
 		return vo.CommErrResp(c, err)
 	}

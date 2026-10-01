@@ -2,6 +2,19 @@
 
 ### Unreleased
 
+### v2.0.1(20261001)
+
+#### optimization:
+
+1. 明确 controller、service、repository 与 DO/DTO/VO 按业务域分子包，层根包保留装配和明确公共能力；补充各层 Agent 入口和新增模块步骤。
+2. 明确 MySQL DO 业务子包内一表一文件，DO、TableName() 与列映射同文件，禁止多表模型集中平铺。
+3. 示例用户 VO 移至 models/vo/example_vo，Lark DTO 移至 models/dto/lark_dto，同步调用方和组件过滤规则。
+
+#### note:
+
+1. 已有生成工程需自行同步规范并迁移相关 package/import；HTTP、JSON、表名及鉴权契约不因目录迁移而改变。
+2. 本轮开发验证及未覆盖范围见 [业务子包验证记录](docs/test/2026-10-01-business-packages.md)；本版本无 SQL 变更。
+
 ### v2.0.0(20260930)
 
 #### feature:

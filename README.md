@@ -1,6 +1,6 @@
 # go-web-starter
 
-Go 1.27.1 + Echo v5 + Uber Fx 脚手架。当前发布：v2.0.0，Go module 路径使用 /v2。生成工程自带严格配置校验、请求关联日志、统一错误、鉴权、存活/就绪探针、资源生命周期、文档和 Harness。
+Go 1.27.1 + Echo v5 + Uber Fx 脚手架。当前发布：v2.0.1，Go module 路径使用 /v2。生成工程自带严格配置校验、请求关联日志、统一错误、鉴权、存活/就绪探针、资源生命周期、文档和 Harness。
 
 ```sh
 make build
@@ -32,4 +32,4 @@ new/init 只接受不存在、空目录或仅有 .git 的目录，拒绝符号�
 
 make test 验证生成器；make integration 验证实际生成工程；make build/release 只构建。go-starter 参考仓通过固定配置和来源清单同步，见维护文档。
 
-安装此版本：`go install github.com/SisyphusSQ/go-web-starter/v2@v2.0.0`。也可下载对应平台的 Release 压缩包；Windows 使用 .exe。
+安装此版本：`go install github.com/SisyphusSQ/go-web-starter/v2@v2.0.1`。也可下载对应平台的 Release 压缩包；Windows 使用 .exe。

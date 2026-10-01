@@ -2,7 +2,7 @@
 
 所有公共行为修改 internal/scaf_fold/_template，再验证生成器及生成工程。
 
-固定 go-starter 参考配置：module=github.com/SisyphusSQ/go-starter/v2，appVersion=v2.0.0，binary=go-starter，MySQL+MongoDB+Redis+cron+Lark+Prometheus query+JWT，examples=false，issue-provider=linear。所有外部组件默认 disabled。
+固定 go-starter 参考配置：module=github.com/SisyphusSQ/go-starter/v2，appVersion=v2.0.1，binary=go-starter，MySQL+MongoDB+Redis+cron+Lark+Prometheus query+JWT，examples=false，issue-provider=linear。所有外部组件默认 disabled。
 
 ```sh
 go run . reference --target /abs/path/to/go-starter

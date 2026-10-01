@@ -18,6 +18,11 @@ func TestGenerateStandaloneProject(t *testing.T) {
 			t.Errorf("generated project missing %s: %v", path, err)
 		}
 	}
+	for _, path := range []string{"docs/design/architecture/packages.md", "internal/controller/AGENTS.md", "internal/service/AGENTS.md", "internal/repository/AGENTS.md"} {
+		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
+			t.Errorf("standalone project missing package guidance %s: %v", path, err)
+		}
+	}
 }
 
 // 选择数据库只选择基础设施，不应自动暴露示例业务。

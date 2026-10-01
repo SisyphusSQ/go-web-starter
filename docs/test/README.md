@@ -11,6 +11,7 @@
 
 ## 本次验证记录
 
+- [业务子包规范 v2.0.1](2026-10-01-business-packages.md)
 - [首轮现代化](2026-09-30-modernization.md)
 - [六平台与开发规范](2026-09-30-platforms-and-conventions.md)
 

@@ -10,16 +10,17 @@ import (
 	"{{ .ModuleName }}/internal/lib/log"
 	do "{{ .ModuleName }}/internal/models/do/mongo/example_do"
 	"{{ .ModuleName }}/internal/models/vo"
+	"{{ .ModuleName }}/internal/models/vo/example_vo"
 	"{{ .ModuleName }}/internal/repository/mongo/example_repo"
 	"{{ .ModuleName }}/utils"
 )
 
 type UserMongoService interface {
-	GetByID(ctx context.Context, id string) (vo.MongoUserView, error)
-	List(ctx context.Context, page, pageSize int) (vo.UserMongoListResp, error)
-	Create(ctx context.Context, req vo.CreateMongoUserReq) (vo.MongoUserView, error)
-	Update(ctx context.Context, id string, req vo.UpdateUserReq) (vo.UserMongoIDResp, error)
-	Delete(ctx context.Context, id string) (vo.UserMongoIDResp, error)
+	GetByID(ctx context.Context, id string) (example_vo.MongoUserView, error)
+	List(ctx context.Context, page, pageSize int) (example_vo.UserMongoListResp, error)
+	Create(ctx context.Context, req example_vo.CreateMongoUserReq) (example_vo.MongoUserView, error)
+	Update(ctx context.Context, id string, req example_vo.UpdateUserReq) (example_vo.UserMongoIDResp, error)
+	Delete(ctx context.Context, id string) (example_vo.UserMongoIDResp, error)
 }
 
 type UserMongoServiceImpl struct {
@@ -40,14 +41,14 @@ func NewUserMongoService(repo example_repo.UserRepository, timeout time.Duration
 	}, nil
 }
 
-func (s *UserMongoServiceImpl) view(user *do.User)vo.MongoUserView{return vo.MongoUserView{ID:user.ID.Hex(),Name:user.Name,Email:user.Email}}
-func (s *UserMongoServiceImpl) GetByID(ctx context.Context,id string)(vo.MongoUserView,error){
- objectID,err:=bson.ObjectIDFromHex(id);if err!=nil{return vo.MongoUserView{},utils.ErrBadParamInput}
+func (s *UserMongoServiceImpl) view(user *do.User)example_vo.MongoUserView{return example_vo.MongoUserView{ID:user.ID.Hex(),Name:user.Name,Email:user.Email}}
+func (s *UserMongoServiceImpl) GetByID(ctx context.Context,id string)(example_vo.MongoUserView,error){
+ objectID,err:=bson.ObjectIDFromHex(id);if err!=nil{return example_vo.MongoUserView{},utils.ErrBadParamInput}
  ctx,cancel:=context.WithTimeout(ctx,s.contextTimeout);defer cancel()
- user,err:=s.repo.GetByID(ctx,objectID);if err!=nil{return vo.MongoUserView{},err};return s.view(user),nil
+ user,err:=s.repo.GetByID(ctx,objectID);if err!=nil{return example_vo.MongoUserView{},err};return s.view(user),nil
 }
 
-func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (resp vo.UserMongoListResp, err error) {
+func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (resp example_vo.UserMongoListResp, err error) {
 	log.FromContext(ctx).Debugf("[UserMongoSrv.List] page[%d] pageSize[%d] start", page, pageSize)
 	if err = vo.ValidateBaseList(page, pageSize); err != nil {
 		log.FromContext(ctx).Warnf("[UserMongoSrv.List] page[%d] pageSize[%d] validate error: %v", page, pageSize, err)
@@ -64,8 +65,8 @@ func (s *UserMongoServiceImpl) List(ctx context.Context, page, pageSize int) (re
 		log.FromContext(ctx).Error("user list failed")
 		return resp, err
 	}
-	views:=make([]vo.MongoUserView,0,len(users));for _,user:=range users{views=append(views,s.view(user))}
-resp = vo.UserMongoListResp{
+	views:=make([]example_vo.MongoUserView,0,len(users));for _,user:=range users{views=append(views,s.view(user))}
+resp = example_vo.UserMongoListResp{
 		Total: total,
 		List:  views,
 	}
@@ -73,14 +74,14 @@ resp = vo.UserMongoListResp{
 	return resp, nil
 }
 
-func (s *UserMongoServiceImpl) Create(ctx context.Context,req vo.CreateMongoUserReq)(vo.MongoUserView,error){
- if err:=req.Validate();err!=nil{return vo.MongoUserView{},err}
+func (s *UserMongoServiceImpl) Create(ctx context.Context,req example_vo.CreateMongoUserReq)(example_vo.MongoUserView,error){
+ if err:=req.Validate();err!=nil{return example_vo.MongoUserView{},err}
  ctx,cancel:=context.WithTimeout(ctx,s.contextTimeout);defer cancel()
  user:=&do.User{Name:req.Name,Email:req.Email}
- if err:=s.repo.Create(ctx,user);err!=nil{return vo.MongoUserView{},err};return s.view(user),nil
+ if err:=s.repo.Create(ctx,user);err!=nil{return example_vo.MongoUserView{},err};return s.view(user),nil
 }
 
-func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req vo.UpdateUserReq) (resp vo.UserMongoIDResp, err error) {
+func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req example_vo.UpdateUserReq) (resp example_vo.UserMongoIDResp, err error) {
 	log.FromContext(ctx).Debugf("[UserMongoSrv.Update] id[%s] start", id)
 	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -107,14 +108,14 @@ func (s *UserMongoServiceImpl) Update(ctx context.Context, id string, req vo.Upd
 		log.FromContext(ctx).Error("user update failed")
 		return resp, err
 	}
-	resp = vo.UserMongoIDResp{
+	resp = example_vo.UserMongoIDResp{
 		ID: id,
 	}
 	log.FromContext(ctx).Infof("[UserMongoSrv.Update] id[%s] success", id)
 	return resp, nil
 }
 
-func (s *UserMongoServiceImpl) Delete(ctx context.Context, id string) (resp vo.UserMongoIDResp, err error) {
+func (s *UserMongoServiceImpl) Delete(ctx context.Context, id string) (resp example_vo.UserMongoIDResp, err error) {
 	log.FromContext(ctx).Debugf("[UserMongoSrv.Delete] id[%s] start", id)
 	objectID, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -128,7 +129,7 @@ func (s *UserMongoServiceImpl) Delete(ctx context.Context, id string) (resp vo.U
 		log.FromContext(ctx).Error("user delete failed")
 		return resp, err
 	}
-	resp = vo.UserMongoIDResp{
+	resp = example_vo.UserMongoIDResp{
 		ID: id,
 	}
 	log.FromContext(ctx).Infof("[UserMongoSrv.Delete] id[%s] success", id)

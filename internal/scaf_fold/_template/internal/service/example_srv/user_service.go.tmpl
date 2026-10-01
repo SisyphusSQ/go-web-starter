@@ -9,6 +9,7 @@ import (
  gormv2 "{{ .ModuleName }}/internal/lib/gorm"
  do "{{ .ModuleName }}/internal/models/do/mysql/example_do"
  "{{ .ModuleName }}/internal/models/vo"
+ "{{ .ModuleName }}/internal/models/vo/example_vo"
  "{{ .ModuleName }}/internal/repository/mysql/example_repo"
  "{{ .ModuleName }}/utils"
 {{ if .JWT }}
@@ -20,14 +21,14 @@ import (
 
 var ErrInvalidCredentials=errors.New("invalid credentials")
 type UserService interface {
- GetByID(context.Context,int64)(vo.UserView,error)
- List(context.Context,int,int)(vo.UserListResp,error)
- Create(context.Context,vo.CreateUserReq)(vo.UserView,error)
- Update(context.Context,int64,vo.UpdateUserReq)(vo.UserIDResp,error)
- Delete(context.Context,int64)(vo.UserIDResp,error)
+ GetByID(context.Context,int64)(example_vo.UserView,error)
+ List(context.Context,int,int)(example_vo.UserListResp,error)
+ Create(context.Context,example_vo.CreateUserReq)(example_vo.UserView,error)
+ Update(context.Context,int64,example_vo.UpdateUserReq)(example_vo.UserIDResp,error)
+ Delete(context.Context,int64)(example_vo.UserIDResp,error)
 {{ if .JWT }}
- Login(context.Context,vo.LoginReq)(vo.LoginResp,error)
- Logout(context.Context,int64)(vo.UserIDResp,error)
+ Login(context.Context,example_vo.LoginReq)(example_vo.LoginResp,error)
+ Logout(context.Context,int64)(example_vo.UserIDResp,error)
 {{ end }}
 }
 type UserServiceImpl struct {repo example_repo.UserRepository; timeout time.Duration; config config.Config{{ if .JWT }}; cache *redisv9.Client{{ end }}}
@@ -38,56 +39,56 @@ func NewUserService(repo example_repo.UserRepository,timeout time.Duration,cfg c
  if repo==nil||timeout<=0{return nil,errors.New("user service requires repository and positive timeout")}
  return &UserServiceImpl{repo:repo,timeout:timeout,config:cfg{{ if .JWT }},cache:deps.Cache{{ end }}},nil
 }
-func (s *UserServiceImpl) view(user do.User)vo.UserView{return vo.UserView{ID:user.ID,Name:user.Name,Email:user.Email}}
-func (s *UserServiceImpl) GetByID(ctx context.Context,id int64)(vo.UserView,error){
- if id<=0{return vo.UserView{},utils.ErrBadParamInput}
+func (s *UserServiceImpl) view(user do.User)example_vo.UserView{return example_vo.UserView{ID:user.ID,Name:user.Name,Email:user.Email}}
+func (s *UserServiceImpl) GetByID(ctx context.Context,id int64)(example_vo.UserView,error){
+ if id<=0{return example_vo.UserView{},utils.ErrBadParamInput}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
  user,err:=s.repo.GetByID(ctx,id);return s.view(user),err
 }
-func (s *UserServiceImpl) List(ctx context.Context,page,size int)(vo.UserListResp,error){
- if err:=vo.ValidateBaseList(page,size);err!=nil{return vo.UserListResp{},err}
+func (s *UserServiceImpl) List(ctx context.Context,page,size int)(example_vo.UserListResp,error){
+ if err:=vo.ValidateBaseList(page,size);err!=nil{return example_vo.UserListResp{},err}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
  conditions:=&gormv2.DBConditions{NeedCount:true,Order:"id DESC",Limit:size,Offset:(page-1)*size}
- users,err:=s.repo.ListByConditions(ctx,conditions);if err!=nil{return vo.UserListResp{},err}
- views:=make([]vo.UserView,0,len(users));for _,user:=range users{views=append(views,s.view(user))}
- return vo.UserListResp{Total:conditions.Count,List:views},nil
+ users,err:=s.repo.ListByConditions(ctx,conditions);if err!=nil{return example_vo.UserListResp{},err}
+ views:=make([]example_vo.UserView,0,len(users));for _,user:=range users{views=append(views,s.view(user))}
+ return example_vo.UserListResp{Total:conditions.Count,List:views},nil
 }
-func (s *UserServiceImpl) Create(ctx context.Context,req vo.CreateUserReq)(vo.UserView,error){
- if err:=req.Validate();err!=nil{return vo.UserView{},err}
+func (s *UserServiceImpl) Create(ctx context.Context,req example_vo.CreateUserReq)(example_vo.UserView,error){
+ if err:=req.Validate();err!=nil{return example_vo.UserView{},err}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
- hash,err:=bcrypt.GenerateFromPassword([]byte(req.Password),bcrypt.DefaultCost);if err!=nil{return vo.UserView{},err}
+ hash,err:=bcrypt.GenerateFromPassword([]byte(req.Password),bcrypt.DefaultCost);if err!=nil{return example_vo.UserView{},err}
  user:=do.User{Name:req.Name,Email:req.Email,Password:string(hash)}
- if err:=s.repo.Create(ctx,&user);err!=nil{return vo.UserView{},err}
+ if err:=s.repo.Create(ctx,&user);err!=nil{return example_vo.UserView{},err}
  return s.view(user),nil
 }
-func (s *UserServiceImpl) Update(ctx context.Context,id int64,req vo.UpdateUserReq)(vo.UserIDResp,error){
- if id<=0{return vo.UserIDResp{},utils.ErrBadParamInput};if err:=req.Validate();err!=nil{return vo.UserIDResp{},err}
+func (s *UserServiceImpl) Update(ctx context.Context,id int64,req example_vo.UpdateUserReq)(example_vo.UserIDResp,error){
+ if id<=0{return example_vo.UserIDResp{},utils.ErrBadParamInput};if err:=req.Validate();err!=nil{return example_vo.UserIDResp{},err}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
  updates:=map[string]any{};if req.Name!=""{updates["name"]=req.Name};if req.Email!=""{updates["email"]=req.Email}
- return vo.UserIDResp{ID:id},s.repo.UpdateByID(ctx,id,updates)
+ return example_vo.UserIDResp{ID:id},s.repo.UpdateByID(ctx,id,updates)
 }
-func (s *UserServiceImpl) Delete(ctx context.Context,id int64)(vo.UserIDResp,error){
- if id<=0{return vo.UserIDResp{},utils.ErrBadParamInput}
+func (s *UserServiceImpl) Delete(ctx context.Context,id int64)(example_vo.UserIDResp,error){
+ if id<=0{return example_vo.UserIDResp{},utils.ErrBadParamInput}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
- return vo.UserIDResp{ID:id},s.repo.DeleteByID(ctx,id)
+ return example_vo.UserIDResp{ID:id},s.repo.DeleteByID(ctx,id)
 }
 {{ if .JWT }}
-func (s *UserServiceImpl) Login(ctx context.Context,req vo.LoginReq)(vo.LoginResp,error){
- if err:=req.Validate();err!=nil{return vo.LoginResp{},err}
- if s.cache==nil{return vo.LoginResp{},utils.ErrUnauthorized}
+func (s *UserServiceImpl) Login(ctx context.Context,req example_vo.LoginReq)(example_vo.LoginResp,error){
+ if err:=req.Validate();err!=nil{return example_vo.LoginResp{},err}
+ if s.cache==nil{return example_vo.LoginResp{},utils.ErrUnauthorized}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
  user,err:=s.repo.GetByEmail(ctx,req.Email)
- if err!=nil {if errors.Is(err,utils.ErrNotFound){return vo.LoginResp{},ErrInvalidCredentials};return vo.LoginResp{},err}
- if err:=bcrypt.CompareHashAndPassword([]byte(user.Password),[]byte(req.Password));err!=nil{return vo.LoginResp{},ErrInvalidCredentials}
- token,err:=utils.GenerateToken(user.ID,user.Email,s.config.Key.JWT);if err!=nil{return vo.LoginResp{},err}
+ if err!=nil {if errors.Is(err,utils.ErrNotFound){return example_vo.LoginResp{},ErrInvalidCredentials};return example_vo.LoginResp{},err}
+ if err:=bcrypt.CompareHashAndPassword([]byte(user.Password),[]byte(req.Password));err!=nil{return example_vo.LoginResp{},ErrInvalidCredentials}
+ token,err:=utils.GenerateToken(user.ID,user.Email,s.config.Key.JWT);if err!=nil{return example_vo.LoginResp{},err}
  key:=fmt.Sprintf("%s:jwt:user:%d",s.config.Key.JWT.Namespace,user.ID)
- if err:=s.cache.Set(ctx,key,token,s.config.Key.JWT.Expire).Err();err!=nil{return vo.LoginResp{},err}
- return vo.LoginResp{Token:token,ExpiresIn:int64(s.config.Key.JWT.Expire.Seconds())},nil
+ if err:=s.cache.Set(ctx,key,token,s.config.Key.JWT.Expire).Err();err!=nil{return example_vo.LoginResp{},err}
+ return example_vo.LoginResp{Token:token,ExpiresIn:int64(s.config.Key.JWT.Expire.Seconds())},nil
 }
-func (s *UserServiceImpl) Logout(ctx context.Context,id int64)(vo.UserIDResp,error){
- if id<=0||s.cache==nil{return vo.UserIDResp{},utils.ErrUnauthorized}
+func (s *UserServiceImpl) Logout(ctx context.Context,id int64)(example_vo.UserIDResp,error){
+ if id<=0||s.cache==nil{return example_vo.UserIDResp{},utils.ErrUnauthorized}
  ctx,cancel:=context.WithTimeout(ctx,s.timeout);defer cancel()
  key:=fmt.Sprintf("%s:jwt:user:%d",s.config.Key.JWT.Namespace,id)
- return vo.UserIDResp{ID:id},s.cache.Del(ctx,key).Err()
+ return example_vo.UserIDResp{ID:id},s.cache.Del(ctx,key).Err()
 }
 {{ end }}
